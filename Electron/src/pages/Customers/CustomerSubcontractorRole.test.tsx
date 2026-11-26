@@ -4,7 +4,8 @@
 // ① rol kapalı → Fason bölümünde yalnız ipucu (Roller satırını gösterir); kategori listesi YOK, sunucuya yazım YOK
 // ② rol açık + aktif profil → kod + "fason profilini düzenle" penceresi; kategori tıkı FORM değerini değiştirir,
 //    profil ucuna HİÇ gitmez (Kaydet'e kadar) — İptal geri alabilsin
-// ③ rol açık + profil yok → "Kaydet'e basınca profil açılır"
+// ③ rol açık + profil yok → "Kaydet'e basınca profil açılır"; ③b YENİ kart (2026-11-26): rol açılır açılmaz kategori
+//    listesi çizilir, seçim form değeri (kart gövdesiyle tek istekte gider); boş açıklamada kod tekrarlanmaz
 // ④ senkron: değişmeyen formda niyet null; açık + profil yok → create(customerId, kart alanları formdan, kategoriler);
 //    açık + pasif profil → update(isActive:true + kategoriler) — ikinci profil doğmaz; kapalı + aktif → update(isActive:false)
 //    (silme yok); kapalı + profil yok → hiçbir yazım
@@ -16,7 +17,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FormProvider, useForm } from "react-hook-form";
 import { renderWithProviders } from "@/test/render";
-import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_OFF_HINT } from "./CustomerSubcontractorRole";
+import { CustomerSubcontractorRole, SUBCONTRACTOR_NEW_CARD_HINT, SUBCONTRACTOR_ROLE_OFF_HINT } from "./CustomerSubcontractorRole";
 import { SUBCONTRACTOR_CATEGORIES_LABEL } from "./CustomerSubcontractorCategories";
 import { SUBCONTRACTOR_PROFILE_EDIT_LABEL } from "./SubcontractorProfileEdit";
 import { subcontractorIntentOf, syncSubcontractorRole } from "./subcontractorRoleSync";
@@ -52,7 +53,7 @@ const values = (over: Partial<CustomerFormValues> = {}): CustomerFormValues =>
   ({ ...customerFormDefaults, name: "Boya A.Ş.", taxNumber: "1234567890", contactPhone: "0212", address: "Bursa", isCustomerRole: false, isSupplierRole: true, ...over }) as CustomerFormValues;
 
 let lastForm: { getValues: () => CustomerFormValues } | null = null;
-function Harness({ customer, on }: { customer: Customer; on: boolean }) {
+function Harness({ customer, on }: { customer: Customer | null; on: boolean }) {
   const form = useForm<CustomerFormValues>({ defaultValues: values({ isSubcontractorRole: on }) });
   lastForm = form;
   return (
@@ -100,6 +101,26 @@ describe("CustomerSubcontractorRole — Fason bölümü (form değeri)", () => {
     getAll.mockImplementation(() => page([]));
     renderWithProviders(<Harness customer={cari()} on />);
     expect(await screen.findByText(/Kaydet'e basınca bu kart için fason profili açılır/)).toBeInTheDocument();
+  });
+
+  it("⭐ ③b YENİ kart (customer null) + rol açık → kategori listesi HEMEN çizilir, seçim form değeri; profil sorgusu/yazımı yok", async () => {
+    renderWithProviders(<Harness customer={null} on />);
+    expect(await screen.findByText(SUBCONTRACTOR_NEW_CARD_HINT)).toBeInTheDocument();
+    const devere = await screen.findByRole("checkbox", { name: /Devere/ });
+    expect(devere).not.toBeDisabled();
+    await userEvent.click(devere);
+    expect(lastForm?.getValues().subcontractorCategoryIds).toEqual(["cat-dev"]);
+    expect(getAll).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("açıklaması boş kategori kodu tekrar etmez ('DEVERE' satırı yok); dolu açıklama gösterilir", async () => {
+    catGetAll.mockImplementation(() => Promise.resolve({ success: true, data: [...CATS, { id: "cat-z", code: "ZIMPARA", name: "Zımpara", description: "Yüzey işleme" }], pagination: { page: 1, pageSize: 500, total: 3, totalPages: 1 } }));
+    renderWithProviders(<Harness customer={null} on />);
+    expect(await screen.findByText("Yüzey işleme")).toBeInTheDocument();
+    expect(screen.queryByText("DEVERE")).toBeNull();
+    expect(screen.queryByText("BOYA")).toBeNull();
   });
 });
 

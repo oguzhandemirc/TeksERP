@@ -11,6 +11,8 @@
 // §6 KART + PROFİL TEK TX (kullanıcı 16:03): create `subcontractorRole:true` → profil kartla doğar (kod/ad karttan,
 //    `customerId` bağ, fason rolü true); Tedarikçi rolsüz → 400, kart doğmaz; aynı adda bağsız fason → 409 ve KART
 //    DA DOĞMAZ (tx geri alındı); `isSubcontractorRole:true` gövdesi tek başına profil doğurmaz
+// §7 TEK İSTEK (2026-11-26): `subcontractorCategoryIds` profille aynı tx'te bağlanır; pasif/olmayan kategori 400 ve
+//    kart/profil/bağ HİÇ yazılmaz; fason rolsüz dolu liste 400 `SUBCONTRACTOR_CATEGORY_WITHOUT_ROLE`
 // Negatif sondalar (kırmızı görüldü): `applyPartnerRoles`'ta fason rolü gövdeden geçirilince §3 ❌;
 // `CustomerService.extraWhere` kaldırılınca §4 ❌ (rol süzgeci sessizce düşer, müşteri-only satır gelir).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik yalnız `temizle`de.
@@ -172,6 +174,27 @@ async function main(): Promise<void> {
     check("⭐ aynı adda bağsız fason varken → 409 yönlendirme ve KART DA DOĞMADI (tek tx geri alındı)", status(e8) === 409 && msg(e8).includes("Fason Firmalar") && (await prisma.customer.count({ where: { name: { startsWith: T } } })) === kartSayisiOnce, msg(e8));
     const s9 = await create({ name: "s9", isSupplierRole: true, isSubcontractorRole: true });
     check("isSubcontractorRole:true gövdesi (subcontractorRole olmadan) profil DOĞURMAZ, bayrak false", (await prisma.subcontractor.count({ where: { customerId: s9.id } })) === 0 && sig(s9) === "SUPPLIER:-S-");
+
+    console.log("\n§7 kart + profil + kategoriler TEK istek (subcontractorCategoryIds)");
+    const kat = async (k: string, isActive = true) => (await prisma.subcontractorCategory.create({ data: { code: `${T}-${k}`, name: `${T} ${k}`, isActive }, select: { id: true } })).id;
+    const [k1, k2, kPasif] = [await kat("K1"), await kat("K2"), await kat("KP", false)];
+    const s10 = await create({ name: "s10", isSupplierRole: true, subcontractorRole: true, subcontractorCategoryIds: [k1, k2, k1] });
+    const prof10 = await prisma.subcontractor.findFirst({ where: { customerId: s10.id }, select: { categories: { select: { categoryId: true } } } });
+    const bag10 = (prof10?.categories ?? []).map((c) => c.categoryId).sort();
+    check("⭐ tek create → kart + profil + kategori bağları birlikte doğdu (mükerrer kimlik tekilleşti)", sig(s10) === "SUPPLIER:-SF" && JSON.stringify(bag10) === JSON.stringify([k1, k2].sort()), `${sig(s10)} ${bag10.length} bağ`);
+    const yaziliOnce = async () => [await prisma.customer.count({ where: { name: { startsWith: T } } }), await prisma.subcontractor.count({ where: { customer: { name: { startsWith: T } } } }), await prisma.subcontractorToCategory.count({ where: { categoryId: { in: [k1, k2, kPasif] } } })].join("/");
+    const once7 = await yaziliOnce();
+    const kod = (e: unknown) => (e instanceof AppError ? String((e.details as { code?: unknown } | undefined)?.code ?? "") : "");
+    const e10 = await hata(() => create({ name: "s11", isSupplierRole: true, subcontractorRole: true, subcontractorCategoryIds: [k1, kPasif] }));
+    check("⭐ pasif kategori → 400 SUBCONTRACTOR_CATEGORY_INVALID ve HİÇBİR ŞEY yazılmadı (kart/profil/bağ — atomik)", status(e10) === 400 && kod(e10) === "SUBCONTRACTOR_CATEGORY_INVALID" && (await yaziliOnce()) === once7, `${kod(e10)} ${once7} → ${await yaziliOnce()}`);
+    const e11 = await hata(() => create({ name: "s12", isSupplierRole: true, subcontractorRole: true, subcontractorCategoryIds: ["00000000-0000-4000-8000-000000000000"] }));
+    check("olmayan kategori kimliği → 400 ve kart doğmadı", status(e11) === 400 && kod(e11) === "SUBCONTRACTOR_CATEGORY_INVALID" && (await yaziliOnce()) === once7, msg(e11));
+    const e12 = await hata(() => create({ name: "s13", isSupplierRole: true, subcontractorCategoryIds: [k1] }));
+    check("⭐ fason rolü (subcontractorRole) olmadan kategori → 400 SUBCONTRACTOR_CATEGORY_WITHOUT_ROLE, kart doğmadı", status(e12) === 400 && kod(e12) === "SUBCONTRACTOR_CATEGORY_WITHOUT_ROLE" && (await yaziliOnce()) === once7, msg(e12));
+    const e13 = await hata(() => create({ name: "s14", isSupplierRole: true, subcontractorRole: true, subcontractorCategoryIds: "x" }));
+    check("dizi olmayan / uuid olmayan gövde → 400 SUBCONTRACTOR_CATEGORY_INVALID", status(e13) === 400 && kod(e13) === "SUBCONTRACTOR_CATEGORY_INVALID", msg(e13));
+    const s15 = await create({ name: "s15", isSupplierRole: true, subcontractorCategoryIds: [] });
+    check("rolsüz boş liste → bugünkü davranış (kart doğar, profil yok)", sig(s15) === "SUPPLIER:-S-" && (await prisma.subcontractor.count({ where: { customerId: s15.id } })) === 0);
   } catch (e) {
     fail++;
     console.log(`  ✗ FAIL: beklenmeyen hata — ${msg(e).slice(0, 300)}`);
@@ -189,6 +212,7 @@ async function temizle(): Promise<void> {
   // Z-A: kart hesabıyla doğar (finans açıkken) — hesap (Restrict FK) karttan ÖNCE gider; hareket/bakiye yok (boş doğar).
   await prisma.cariAccount.deleteMany({ where: { OR: [{ customer: kartWhere }, { subcontractor: { code: { startsWith: T } } }] } });
   await prisma.customer.deleteMany({ where: kartWhere });
+  await prisma.subcontractorCategory.deleteMany({ where: { code: { startsWith: T } } });
 }
 
 main().catch(async (e) => {

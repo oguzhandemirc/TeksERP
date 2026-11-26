@@ -97,14 +97,15 @@ export const PROFILE_NAME_TAKEN_MESSAGE =
 /**
  * KART + PROFİL BİRLİKTE DOĞAR (kullanıcı 16:03): "Yeni Cari" formunda "Fason iş yapar" işaretliyse
  * `POST /customers` tek tx'te kartı yazar ve bu fonksiyonla profili yaratır (kod/ad/vergi/telefon/adres
- * karttan; kategori/favori sonradan Fason Firmalar'dan). Tedarikçi rolü şartı çağıranda (400). Aynı adda
- * bağsız fason varsa DB seddi (`nameFold` partial unique) P2002 → 409 yönlendirme cümlesi.
+ * karttan; kategori bağları aynı tx'te `linkSubcontractorCategoriesTx` ile — geçersiz kategori 400 kartı da geri alır).
+ * Tedarikçi rolü şartı çağıranda (400). Aynı adda bağsız fason varsa DB seddi (`nameFold` partial unique) P2002 → 409.
  */
 export async function createProfileForCustomerTx(
   tx: Prisma.TransactionClient,
   card: { id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null },
   userId?: string,
-): Promise<{ id: string; code: string }> {
+  categoryIds: readonly string[] = [],
+): Promise<{ id: string; code: string; categoryIds: string[] }> {
   try {
     const p = await tx.subcontractor.create({
       data: {
@@ -119,12 +120,33 @@ export async function createProfileForCustomerTx(
       },
       select: { id: true, code: true },
     });
+    const linked = await linkSubcontractorCategoriesTx(tx, p.id, categoryIds);
     await syncSubcontractorRoleTx(tx, [card.id]);
-    return p;
+    return { ...p, categoryIds: linked };
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") throw AppError.conflict(PROFILE_NAME_TAKEN_MESSAGE);
     throw e;
   }
+}
+
+/**
+ * Kart doğuş gövdesinin fason niyeti (yeni cari formu, TEK istek) — iki alanı gövdeden ALIR (kart kolonu değiller):
+ * `subcontractorRole: true` profil ister; `subcontractorCategoryIds` yok/null → []; uuid dizisi değilse 400; fason
+ * rolü istenmeden dolu gelirse 400 — kategori profilsiz yaşayamaz. Var/aktif denetimi bağ yazılırken (tx içinde).
+ */
+export function takeCardSubcontractorIntent(data: Record<string, unknown>): { wantsProfile: boolean; categoryIds: string[] } {
+  const wantsProfile = data.subcontractorRole === true;
+  const raw = data.subcontractorCategoryIds;
+  delete data.subcontractorRole;
+  delete data.subcontractorCategoryIds;
+  if (raw === undefined || raw === null) return { wantsProfile, categoryIds: [] };
+  if (!Array.isArray(raw) || raw.length > 200 || !raw.every((v) => typeof v === "string" && CATEGORY_UUID_RE.test(v))) {
+    throw AppError.badRequest("Fason kategorileri geçersiz: kategori kimlikleri listesi bekleniyor.", { code: SUBCONTRACTOR_CATEGORY_INVALID });
+  }
+  if (raw.length > 0 && !wantsProfile) {
+    throw AppError.badRequest("Fason kategorisi seçmek için kartta \"Fason iş yapar\" işaretli olmalı.", { code: "SUBCONTRACTOR_CATEGORY_WITHOUT_ROLE" });
+  }
+  return { wantsProfile, categoryIds: raw as string[] };
 }
 
 /** Yarışta DB tekil index'i kazanır: P2002(customerId) → aynı 409 cümlesi. */
@@ -526,13 +548,16 @@ function normalizeAndValidateAddress(raw: unknown): string | null | undefined {
   return trimmed;
 }
 
+/** Geçersiz/pasif/biçimsiz fason kategorisi kimliği (profil ve kartla doğuş yolları ortak `details.code`). */
+export const SUBCONTRACTOR_CATEGORY_INVALID = "SUBCONTRACTOR_CATEGORY_INVALID";
+
 /**
  * F88: categoryIds var-mı + isActive doğrulaması (dedupe) — pasif kategoriye bağ
  * kurulmasını, olmayan UUID'nin belirsiz P2003'ünü ve mükerrer UUID'nin P2002'sini önler.
  */
 async function assertActiveCategories(
   tx: Prisma.TransactionClient,
-  ids: string[],
+  ids: readonly string[],
 ): Promise<string[]> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return unique;
@@ -543,7 +568,23 @@ async function assertActiveCategories(
   if (found.length !== unique.length) {
     const ok = new Set(found.map((c) => c.id));
     const invalid = unique.filter((id) => !ok.has(id));
-    throw AppError.badRequest(`Geçersiz veya pasif fason kategorisi: ${invalid.join(", ")}`);
+    throw AppError.badRequest(`Geçersiz veya pasif fason kategorisi: ${invalid.join(", ")}`, { code: SUBCONTRACTOR_CATEGORY_INVALID });
+  }
+  return unique;
+}
+
+/**
+ * Profil ↔ kategori bağlarının TEK yazarı (oluşturma, güncelleme, kartla doğuş): doğrular (var + aktif + dedupe)
+ * ve bağları ekler. Mevcut bağları silmek çağıranın işidir (güncellemede tam değişim). Dönüş: yazılan kimlikler.
+ */
+export async function linkSubcontractorCategoriesTx(
+  tx: Prisma.TransactionClient,
+  subcontractorId: string,
+  categoryIds: readonly string[],
+): Promise<string[]> {
+  const unique = await assertActiveCategories(tx, categoryIds);
+  if (unique.length > 0) {
+    await tx.subcontractorToCategory.createMany({ data: unique.map((categoryId) => ({ subcontractorId, categoryId })) });
   }
   return unique;
 }
@@ -767,16 +808,8 @@ export class SubcontractorManagementService {
         });
         createdId = c.id;
       }
-      // F88: kategori doğrulama (var + aktif + dedupe) createMany ÖNCESİ.
-      const uniqueCategoryIds = await assertActiveCategories(tx, categoryIds);
-      if (uniqueCategoryIds.length > 0) {
-        await tx.subcontractorToCategory.createMany({
-          data: uniqueCategoryIds.map((categoryId) => ({
-            subcontractorId: createdId,
-            categoryId,
-          })),
-        });
-      }
+      // F88: kategori doğrulama (var + aktif + dedupe) createMany ÖNCESİ — tek yazar.
+      await linkSubcontractorCategoriesTx(tx, createdId, categoryIds);
       // Rol modeli: bağlı kartın fason rolü profil ile birlikte doğar (reaktivasyonda da).
       await syncSubcontractorRoleTx(tx, [payload.customerId]);
       return sequentialTx(tx).subcontractor.findUnique({
@@ -903,16 +936,8 @@ export class SubcontractorManagementService {
 
       if (categoryIds !== undefined) {
         await tx.subcontractorToCategory.deleteMany({ where: { subcontractorId: id } });
-        // F88: kategori doğrulama (var + aktif + dedupe) createMany öncesi.
-        const uniqueCategoryIds = await assertActiveCategories(tx, categoryIds);
-        if (uniqueCategoryIds.length > 0) {
-          await tx.subcontractorToCategory.createMany({
-            data: uniqueCategoryIds.map((categoryId) => ({
-              subcontractorId: id,
-              categoryId,
-            })),
-          });
-        }
+        // F88: kategori doğrulama (var + aktif + dedupe) createMany öncesi — tek yazar.
+        await linkSubcontractorCategoriesTx(tx, id, categoryIds);
       }
 
       return sequentialTx(tx).subcontractor.findUnique({

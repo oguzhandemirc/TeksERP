@@ -1,5 +1,5 @@
 // Cari kartı "Bilgiler" gövdesi (yeni + düzenleme). Sıra (2026-11-24): Kimlik → İletişim → Adres ve sevk → Şubeler
-// (yalnız yeni kartta) → Finans → Fason (yalnız düzenlemede) → Notlar. Kimlik dışındaki her bölüm × yanındaki
+// (yalnız yeni kartta) → Finans → Fason (düzenlemede; yeni kartta "Fason iş yapar" seçilince) → Notlar. Kimlik dışındaki her bölüm × yanındaki
 // "Bölümleri göster/gizle" menüsünde; seçim kullanıcı tercihine yazılır (`modalSections["customer.form"]`).
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ const TEXTAREA =
 
 export function CustomerInfoFields({ form, initial, requiredRole, finance, showBranchDraft }: Props) {
   const isEdit = Boolean(initial);
+  const fasonOn = form.watch("isSubcontractorRole");
   return (
     <div className="space-y-4">
       <IdentityCard form={form} initial={initial} requiredRole={requiredRole} />
@@ -43,10 +44,11 @@ export function CustomerInfoFields({ form, initial, requiredRole, finance, showB
         </FormCard>
       )}
       {finance.canRead && <CustomerFinanceSection form={form as never} customerId={initial?.id ?? null} canWrite={finance.canWrite} />}
-      {/* Fason profili durumu + kategoriler (düzenlemede; rol düğmesi Kimlik › Roller'de). Hepsi Kaydet ile yazılır. */}
-      {isEdit && initial && (
+      {/* Fason profili durumu + kategoriler (rol düğmesi Kimlik › Roller'de). Düzenlemede hep; yeni kartta rol seçilince —
+          kategoriler kart gövdesiyle TEK istekte gider (`subcontractorCategoryIds`, kart + profil + bağ tek tx). */}
+      {(isEdit || fasonOn) && (
         <FormCard title="Fason" sectionId="fason">
-          <CustomerSubcontractorRole customer={initial} />
+          <CustomerSubcontractorRole customer={initial ?? null} />
         </FormCard>
       )}
       <FormCard title="Notlar" sectionId="notes" errorFields={["notes"]}>
