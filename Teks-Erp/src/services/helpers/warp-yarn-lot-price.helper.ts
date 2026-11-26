@@ -44,6 +44,25 @@ export async function readLotPricesTry(db: Db, lotIds: string[], fxRate: (c: Cur
   return out;
 }
 
+export interface YarnReceiptLot { yarnItemId: string; lotId: string; ownerCustomerId: string | null; at: Date }
+
+/**
+ * Atkı (K7): ipliğin `until`e kadarki lotlu girişleri, yeniden eskiye. Atkının topa lot bağı yok; çağıran "o tarihte
+ * son giren lot"u seçer. İptal fişin girişi sayılmaz; fişsiz giriş (emanet iplik) sahibini söylemek için kalır.
+ */
+export async function readYarnReceiptLots(db: Db, yarnItemIds: string[], until: Date): Promise<YarnReceiptLot[]> {
+  if (yarnItemIds.length === 0) return [];
+  const rows = await db.yarnMovement.findMany({
+    where: {
+      itemId: { in: yarnItemIds }, kind: YarnMovementKind.IN, lotId: { not: null }, createdAt: { lte: until },
+      OR: [{ goodsReceiptId: null }, { goodsReceipt: { status: GoodsReceiptStatus.ACTIVE } }],
+    },
+    select: { itemId: true, lotId: true, createdAt: true, lot: { select: { ownerCustomerId: true } } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  });
+  return rows.map((r) => ({ yarnItemId: r.itemId, lotId: r.lotId!, ownerCustomerId: r.lot?.ownerCustomerId ?? null, at: r.createdAt }));
+}
+
 export interface BeamIssueLot { beamId: string; yarnItemId: string; lotId: string; kg: Dec }
 
 /** Kendi devere makinemizde sarılan leventlere çıkan lotlar (WARP_ISSUE) — yalnız fiyat ağırlığı için. */

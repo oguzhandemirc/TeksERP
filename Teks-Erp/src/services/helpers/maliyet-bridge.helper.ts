@@ -154,6 +154,21 @@ export async function loadRollWarpYarnCosts(db: Prisma.TransactionClient | typeo
   });
 }
 
+/**
+ * Topların atkı ipliği payı (K7): norm miktar × gerçek fiyat. Devereden bağımsız (atkı levente sarılmaz). İplik kapalıysa
+ * lot girişleri okunmaz; norm maliyet kartı fiyatıyla (tahmini) fiyatlanır.
+ */
+export async function loadRollWeftYarnCosts(
+  db: Prisma.TransactionClient | typeof prisma, rolls: Array<{ rollId: string; lines: import("./weft-yarn-actual.helper").WeftNormLine[] }>,
+): Promise<Map<string, import("./weft-yarn-actual.helper").RollWeftYarnCost>> {
+  const { loadRollWeftYarnCostsTx } = await import("./weft-yarn-actual.helper");
+  const iplik = (await readIplikEnabled()) ? await import("./warp-yarn-lot-price.helper") : null;
+  return loadRollWeftYarnCostsTx(db, rolls, {
+    lots: iplik ? { receipts: iplik.readYarnReceiptLots, prices: (d, ids) => iplik.readLotPricesTry(d, ids, suggestFxRate) } : null,
+    fxRate: suggestFxRate,
+  });
+}
+
 // ── İplik ihtiyaç planı (MAL-7) köprüleri — `null` = modül kapalı, "bilinmiyor"; 0 DEĞİL ──
 
 export interface YarnStockRead { serbestKg: Prisma.Decimal; emanetKg: Prisma.Decimal | null }

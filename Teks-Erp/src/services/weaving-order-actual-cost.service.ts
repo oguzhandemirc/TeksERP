@@ -9,14 +9,14 @@ import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { WEAVING_INFO_CODES, weavingActualCostTx, type WeavingActualMissing } from "./helpers/weaving-actual-cost.helper";
-import { missingText, warpingView, warpYarnView } from "./reports/weaving-efficiency.report";
+import { missingText, warpingView, warpYarnView, weftYarnView } from "./reports/weaving-efficiency.report";
 import { qtyText } from "./helpers/qty-text.helper";
 import { readCostProfitMachineTime } from "./system-setting.service";
 
 type Dec = Prisma.Decimal;
 const dec = (d: Dec | null): string | null => (d === null ? null : d.toDecimalPlaces(4).toString());
 
-export type ActualCostRowKey = "TEZGAH" | "DEVERE" | "COZGU_IPLIGI";
+export type ActualCostRowKey = "TEZGAH" | "DEVERE" | "COZGU_IPLIGI" | "ATKI_IPLIGI";
 
 export interface ActualCostRow {
   anahtar: ActualCostRowKey;
@@ -70,6 +70,12 @@ export async function getWeavingOrderActualCost(id: string): Promise<WeavingOrde
     rows.push({
       anahtar: "COZGU_IPLIGI", ad: "Çözgü ipliği", standartTlM: dec(w.standardWarpYarnPerMTry), gercekTlM: dec(w.warpYarnPerMTry),
       kaynak: v.sourceText, tahmini: w.warpYarnSource === "MALIYET_FIYATI" || w.warpYarnSource === "KARMA", eksik: texts(w.warpYarnMissing),
+    });
+  }
+  if (w.weftYarnMissing !== null) {
+    rows.push({
+      anahtar: "ATKI_IPLIGI", ad: "Atkı ipliği (norm miktar)", standartTlM: dec(w.standardWeftYarnPerMTry), gercekTlM: dec(w.weftYarnPerMTry),
+      kaynak: weftYarnView(w).sourceText, tahmini: w.weftYarnSource === "MALIYET_FIYATI" || w.weftYarnSource === "KARMA", eksik: texts(w.weftYarnMissing),
     });
   }
   const notes: string[] = [];

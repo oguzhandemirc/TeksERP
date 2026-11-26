@@ -9,7 +9,8 @@
 // Süre kaynağı ikinci ayar açmaz (§15.1 notu): `maliyet.karlilik.makineSuresi` NORM ise metre ÷ norm, diğer
 // kiplerde (OTURUM varsayılan · VARDIYA) tezgâhın süresi KOŞUMDUR (`KOSUM`).
 // Devere payı (`warping*`) ve çözgü ipliği payı (`warpYarn*`, dilim 3) ayrı alanlardır, köprüden okunur
-// (`loadRollWarpingCosts` · `loadRollWarpYarnCosts`); tezgâh sayıları değişmez.
+// (`loadRollWarpingCosts` · `loadRollWarpYarnCosts`); tezgâh sayıları değişmez. Atkı ipliği payı (`weftYarn*`, K7)
+// norm miktar × gerçek fiyattır (`loadRollWeftYarnCosts`; atkının topa lot bağı yok).
 // =============================================================================
 import { Prisma, type CostComponent } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -17,7 +18,7 @@ import type { ProfitMachineTimeMode } from "../system-setting.service";
 import { machineCostRateHistory } from "./cost-rate-validity.helper";
 import { machineHourCostTry, machineRateAt, normHours } from "./profitability-machine.helper";
 import { liveRollMetersByWeavingOrder, liveRollsByWeavingOrder } from "./weaving-order-of-roll.helper";
-import { loadRollWarpingCosts, loadRollWarpYarnCosts } from "./maliyet-bridge.helper";
+import { loadRollWarpingCosts, loadRollWarpYarnCosts, loadRollWeftYarnCosts } from "./maliyet-bridge.helper";
 
 type Dec = Prisma.Decimal;
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -31,7 +32,9 @@ export type WeavingActualMissing =
   /** SY-N4 BİLGİ (eksik değil): varyantın sürümü yok, standart desen genelinden — rakam varyantın değil, sessiz kalmasın. */
   | "VARYANT_STANDART_YOK"
   /** BİLGİ: çözgü ipliği müşteri malı (müşteri ipliğiyle devere) — bizim maliyetimize girmez, "eksik" değildir. */
-  | "MUSTERI_IPLIGI";
+  | "MUSTERI_IPLIGI"
+  /** Atkı ipliği (K7): fiyat yok · standart sürümde atkı satırı (norm) yok. */
+  | "ATKI_FIYATI" | "ATKI_NORMU";
 /** Devere payının kaynağı: onaylı fatura · siparişteki ücretten tahmin · ikisi karışık. */
 export type WeavingWarpingSource = "FATURA" | "TARIFE" | "KARMA";
 /** Çözgü ipliği payının kaynağı: lot (mal kabul) fiyatı · maliyet kartı iplik fiyatı (tahmini) · ikisi karışık. */
@@ -55,7 +58,8 @@ function standardGaps(found: boolean, hasRecipe: boolean, variantHit: boolean): 
 /** Standart maliyetin DOKUMA satırları (tezgah saati yöntemi üç satır, atkı ücreti yöntemi tek satır). */
 export const WEAVING_STANDARD_COMPONENTS = ["LOOM_MACHINE", "LOOM_LABOR", "ENERGY", "WEAVING_PICK"] as const;
 /** Okunan satırlar: dokuma + çözgü ipliği (dilim 3 karşılığı); dokuma toplamı yalnız `WEAVING_STANDARD_COMPONENTS`. */
-const STANDARD_READ_COMPONENTS: CostComponent[] = [...WEAVING_STANDARD_COMPONENTS, "WARP_YARN"];
+const STANDARD_READ_COMPONENTS: CostComponent[] = [...WEAVING_STANDARD_COMPONENTS, "WARP_YARN", "WEFT_YARN"];
+const LINE_SELECT = { component: true, amountPerMTry: true, yarnItemId: true, qty: true, qtyUnit: true } as const;
 const isWeavingComponent = (c: string): boolean => (WEAVING_STANDARD_COMPONENTS as readonly string[]).includes(c);
 
 export interface WeavingActualCost {
@@ -106,6 +110,15 @@ export interface WeavingActualCost {
   /** Maliyet kartı fiyatından (lot fiyatı yok) gelen kısım, TL. */
   warpYarnEstimatedTry: Dec | null;
   warpYarnMissing: WeavingActualMissing[] | null;
+  // Atkı ipliği payı (K7): miktar standart sürümün atkı NORMU × canlı top metresi, fiyat gerçek; devereden bağımsız.
+  /** Standart sürümün atkı ipliği satırları toplamı (TL/m); sürüm yoksa null. */
+  standardWeftYarnPerMTry: Dec | null;
+  weftYarnCostTry: Dec | null;
+  weftYarnPerMTry: Dec | null;
+  weftYarnCoveredMeters: Dec | null;
+  weftYarnSource: WeavingWarpYarnSource | null;
+  weftYarnEstimatedTry: Dec | null;
+  weftYarnMissing: WeavingActualMissing[] | null;
 }
 
 type RollShare = { costTry: Dec | null; estimatedTry: Dec; sources: string[]; missing: WeavingActualMissing[] };
@@ -140,13 +153,31 @@ function coveredShare<S extends string>(rolls: Array<{ id: string; initialQty: D
   };
 }
 
+type LiveRolls = Awaited<ReturnType<typeof liveRollsByWeavingOrder>>;
+type WeftLine = { component: string; yarnItemId: string | null; qty: Dec | null; qtyUnit: string | null };
+type WeftFields = Pick<WeavingActualCost,
+  "weftYarnCostTry" | "weftYarnPerMTry" | "weftYarnCoveredMeters" | "weftYarnSource" | "weftYarnEstimatedTry" | "weftYarnMissing">;
+
+/** İş başına atkı ipliği alanları: sürümün atkı satırı normu × her canlı topun metresi; normsuz iş `ATKI_NORMU` (0 değil). */
+async function weftFieldsFor(db: Db, liveRolls: LiveRolls, linesOf: (id: string) => WeftLine[] | null): Promise<(id: string) => WeftFields> {
+  const normOf = (id: string) => (linesOf(id) ?? []).flatMap((l) => (l.component === "WEFT_YARN" && l.yarnItemId && l.qty ? [{ yarnItemId: l.yarnItemId, qty: l.qty, qtyUnit: l.qtyUnit }] : []));
+  const input = [...liveRolls.entries()].flatMap(([id, rolls]) => rolls.map((r) => ({ rollId: r.id, lines: normOf(id) })));
+  const costs = await loadRollWeftYarnCosts(db, input);
+  return (id) => {
+    const rolls = liveRolls.get(id) ?? [];
+    const f = rolls.length > 0 && normOf(id).length === 0
+      ? { ...NOT_COVERED, coveredMeters: D0(), missing: ["ATKI_NORMU"] as WeavingActualMissing[] }
+      : customerYarnOnly(coveredShare(rolls, costs, ["LOT", "MALIYET_FIYATI"] as const, "KARMA"));
+    return { weftYarnCostTry: f.costTry, weftYarnPerMTry: f.perMTry, weftYarnCoveredMeters: f.coveredMeters, weftYarnSource: f.source, weftYarnEstimatedTry: f.estimatedTry, weftYarnMissing: f.missing };
+  };
+}
+
 type WarpFields = Pick<WeavingActualCost,
   | "warpingCostTry" | "warpingPerMTry" | "warpingCoveredMeters" | "warpingSource" | "warpingEstimatedTry" | "warpingMissing"
   | "warpYarnCostTry" | "warpYarnPerMTry" | "warpYarnCoveredMeters" | "warpYarnSource" | "warpYarnEstimatedTry" | "warpYarnMissing">;
 
 /** İş başına devere + çözgü ipliği alanları; devere kapalıysa (köprü null) hepsi null. Payda kümesi tezgâh maliyetiyle aynı (canlı top). */
-async function warpFieldsFor(db: Db, weavingOrderIds: string[]): Promise<(id: string) => WarpFields> {
-  const liveRolls = await liveRollsByWeavingOrder(db, weavingOrderIds);
+async function warpFieldsFor(db: Db, liveRolls: LiveRolls): Promise<(id: string) => WarpFields> {
   const rollIds = [...liveRolls.values()].flat().map((r) => r.id);
   const fees = await loadRollWarpingCosts(db, rollIds);
   const yarns = fees ? await loadRollWarpYarnCosts(db, rollIds) : null;
@@ -224,11 +255,11 @@ async function standardVersionsFor(db: Db, orders: OrderKey[]) {
   const recipeIds = [...new Set(orders.flatMap((o) => (o.recipeId ? [o.recipeId] : [])))];
   const versions = await db.standardCostVersion.findMany({
     where: { itemId: { in: itemIds }, recipeId: null, status: "ACTIVE" },
-    select: { itemId: true, loomMPerHour: true, lines: { where: { component: { in: STANDARD_READ_COMPONENTS } }, select: { component: true, amountPerMTry: true } } },
+    select: { itemId: true, loomMPerHour: true, lines: { where: { component: { in: STANDARD_READ_COMPONENTS } }, select: LINE_SELECT, orderBy: { lineNo: "asc" } } },
   });
   const variantVersions = recipeIds.length === 0 ? [] : await db.standardCostVersion.findMany({
     where: { itemId: { in: itemIds }, recipeId: { in: recipeIds }, status: "ACTIVE" },
-    select: { itemId: true, recipeId: true, loomMPerHour: true, lines: { where: { component: { in: STANDARD_READ_COMPONENTS } }, select: { component: true, amountPerMTry: true } } },
+    select: { itemId: true, recipeId: true, loomMPerHour: true, lines: { where: { component: { in: STANDARD_READ_COMPONENTS } }, select: LINE_SELECT, orderBy: { lineNo: "asc" } } },
   });
   const genericOf = new Map(versions.map((v) => [v.itemId, v]));
   const variantOf = new Map(variantVersions.map((v) => [`${v.itemId}|${v.recipeId}`, v]));
@@ -257,11 +288,13 @@ export async function weavingActualCostTx(
     },
   });
   const meters = await liveRollMetersByWeavingOrder(db, weavingOrderIds);
-  const warpFor = await warpFieldsFor(db, weavingOrderIds);
+  const liveRolls = await liveRollsByWeavingOrder(db, weavingOrderIds);
+  const warpFor = await warpFieldsFor(db, liveRolls);
   const machineIds = [...new Set(orders.flatMap((o) => o.machineRuns.map((r) => r.machineId)))].sort();
   const rates = await machineCostRateHistory(db, machineIds);
   const { versionOf, hasVariant } = await standardVersionsFor(db, orders);
   const byId = new Map(orders.map((o) => [o.id, o]));
+  const weftFor = await weftFieldsFor(db, liveRolls, (id) => { const o = byId.get(id); return o ? versionOf(o)?.lines ?? null : null; });
 
   return weavingOrderIds.flatMap((id) => {
     const o = byId.get(id);
@@ -273,6 +306,7 @@ export async function weavingActualCostTx(
     const sumOf = (pick: (c: string) => boolean) => (v ? v.lines.filter((l) => pick(l.component)).reduce((a, l) => a.plus(l.amountPerMTry), D0()) : null);
     const standardPerMTry = sumOf(isWeavingComponent);
     const standardWarpYarnPerMTry = sumOf((c) => c === "WARP_YARN");
+    const standardWeftYarnPerMTry = sumOf((c) => c === "WEFT_YARN");
     missing.push(...standardGaps(!!v, !!o.recipeId, hasVariant(o)));
 
     const { hours, cost, runSec, stopSec, closedRuns } = runTotals(o.machineRuns, { rates, timeSource, now, missing });
@@ -307,7 +341,7 @@ export async function weavingActualCostTx(
       realizedMPerHour: machineHours && machineHours.gt(0) && totalMeters.gt(0) ? totalMeters.div(machineHours) : null,
       stopShare: closedRuns > 0 && runSec > 0 ? new Prisma.Decimal(stopSec).div(runSec) : null,
       ongoing: o.status !== "COMPLETED" || o.machineRuns.some((r) => r.endedAt === null),
-      missing: [...new Set(missing)], standardWarpYarnPerMTry, ...warpFor(id),
+      missing: [...new Set(missing)], standardWarpYarnPerMTry, ...warpFor(id), standardWeftYarnPerMTry, ...weftFor(id),
     }];
   });
 }
