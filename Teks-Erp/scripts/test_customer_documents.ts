@@ -12,9 +12,12 @@
 //   §5 sayfalama + toplam tek gövdeden; tür ve tarih süzgeci
 //   §6 HTTP: tanınmayan tür/anahtar 400, `customer:read` yok 403, yok cari 404
 //   §7 sorgu bütçesi: 3 ve 15 belgeli caride sorgu sayısı EŞİT (N+1 yok)
+//   §8 emanet çıkış belgesi: sahibinin listesinde; başka cariye sızmaz; `consignment:read` ve emanet modülüyle kapılı
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; modül ayarları birebir geri yüklenir; temizlik `finally`de.
 // Negatif sonda (2026-11-12): (a) servisteki tür izni süzgeci kaldırılınca §3 ❌; (b) gelen belge dalında
 // `senderCustomerId` koşulu `IS NOT NULL` yapılınca (cari süzgeci gevşer) §1 "başka cari sızmaz" ❌.
+// Negatif sonda (2026-11-26): `PRINTED_TARGET.CONSIGNMENT_DISPATCH` silinince §8 ⭐ ❌; `TYPE_MODULE` emanet satırı
+// silinince §8 "emanet modülü kapalı" ❌. İkisi de geri alındı.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
@@ -50,7 +53,7 @@ async function measure(fn: () => Promise<unknown>): Promise<number> {
 }
 
 const TAG = `TEST-CDOC-${randomUUID().slice(0, 6)}`;
-const ids = { customers: [] as string[], subs: [] as string[], users: [] as string[], shipments: [] as string[], orders: [] as string[], invoices: [] as string[], accounts: [] as string[], notes: [] as string[], docs: [] as string[] };
+const ids = { customers: [] as string[], subs: [] as string[], users: [] as string[], shipments: [] as string[], orders: [] as string[], invoices: [] as string[], accounts: [] as string[], notes: [] as string[], docs: [] as string[], consignments: [] as string[] };
 const MODULE_KEYS = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED];
 const ALL = ["customer:read", "shipping:read", "order:read", "finance:read", "gelen-belge:read"];
 const Q = (over: Partial<CustomerDocumentsQuery> = {}): CustomerDocumentsQuery => ({ page: 1, pageSize: 25, types: [], ...over });
@@ -182,6 +185,26 @@ async function httpSection(f: Fixture, base: string): Promise<void> {
   check("yok cari 404", (await get(ok, `${randomUUID()}/documents`)).status === 404);
 }
 
+// §8 emanet çıkış belgesi (PR #925): carisi malın sahibi (`ownerCustomerId`); izin `consignment:read`, kapı emanet modülü.
+async function consignmentSection(f: Fixture): Promise<void> {
+  console.log("\n── §8 emanet çıkış belgesi ──");
+  const owner = await card("E");
+  const d = (await prisma.consignmentDispatch.create({ data: { dispatchNo: `${TAG}-EC`, ownerCustomerId: owner }, select: { id: true } })).id;
+  ids.consignments.push(d);
+  await doc("CONSIGNMENT_DISPATCH", d, `${TAG}-EC`);
+  const PERMS = ["customer:read", "consignment:read"];
+  const r = await listCustomerDocuments(owner, Q(), PERMS);
+  check("⭐ sahibin Belgeler listesinde emanet çıkış belgesi; hedef = çıkış kaydı", r.pagination.total === 1 && r.data[0]?.docType === "CONSIGNMENT_DISPATCH" && r.data[0]?.target.type === "consignment-dispatch" && r.data[0]?.target.id === d && r.types.includes("CONSIGNMENT_DISPATCH"), JSON.stringify(r.data));
+  const other = await listCustomerDocuments(f.other, Q({ types: ["CONSIGNMENT_DISPATCH"] }), PERMS);
+  check("başka carinin listesine sızmaz", other.pagination.total === 0);
+  const noPerm = await listCustomerDocuments(owner, Q(), ALL);
+  check("`consignment:read` yok → tür ve satır yok", noPerm.pagination.total === 0 && !noPerm.types.includes("CONSIGNMENT_DISPATCH"));
+  await setModule(SETTING_KEYS.EMANET_ENABLED, false);
+  const off = await listCustomerDocuments(owner, Q(), PERMS);
+  await setModule(SETTING_KEYS.EMANET_ENABLED, true);
+  check("emanet modülü kapalı → tür ve satır yok", off.pagination.total === 0 && !off.types.includes("CONSIGNMENT_DISPATCH"));
+}
+
 async function budgetSection(f: Fixture): Promise<void> {
   console.log("\n── §7 sorgu bütçesi ──");
   await listCustomerDocuments(f.k, Q(), ALL); // ısıtma
@@ -209,6 +232,7 @@ async function main(): Promise<void> {
     await gateSection(f);
     await pagingSection(f);
     await httpSection(f, base);
+    await consignmentSection(f);
     await budgetSection(f);
   } finally {
     server.close();
@@ -226,6 +250,7 @@ async function main(): Promise<void> {
 async function temizle(): Promise<void> {
   await prisma.printedDocument.deleteMany({ where: { id: { in: ids.docs } } });
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: ids.notes } } });
+  await prisma.consignmentDispatch.deleteMany({ where: { id: { in: ids.consignments } } });
   await prisma.invoice.deleteMany({ where: { id: { in: ids.invoices } } });
   await prisma.cariBalance.deleteMany({ where: { cariId: { in: ids.accounts } } });
   await prisma.cariAccount.deleteMany({ where: { id: { in: ids.accounts } } });

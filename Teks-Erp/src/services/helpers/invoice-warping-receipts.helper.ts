@@ -12,6 +12,7 @@ import { AppError } from "../../utils/app-error";
 import { readDevereReworkBillable, readFinanceInvoicePriceTolerancePct } from "../system-setting.service";
 import { ACCEPTED_WARPING_BEAM_WHERE, loadWarpingOrderFeesTx, type WarpingOrderFee } from "./warping-fee.helper";
 import { pctText } from "./qty-text.helper";
+import { invoiceNetExVat } from "./invoice-net.helper";
 import { paraMetni } from "../reports/anlati/sayi-bicim";
 
 type Tx = Prisma.TransactionClient;
@@ -104,7 +105,7 @@ export interface WarpingFeeMatchDto {
   }>;
   /** Σ beklenen — yalnız bütün siparişler fiyatlı ve faturayla aynı dövizdeyse. */
   expectedTotal: string | null;
-  /** KDV hariç net = ara toplam − iskonto. */
+  /** KDV hariç net = `subtotal` (satır iskontosu zaten düşülmüş; `invoiceNetExVat`). */
   invoiceNet: string;
   difference: string | null;
   diffPct: string | null;
@@ -120,13 +121,13 @@ const money = (v: Prisma.Decimal) => v.toDecimalPlaces(2, Prisma.Decimal.ROUND_H
 
 /** Faturanın bağlı kabulleri ↔ beklenen devere ücreti (bilgi; bağsız faturada null). */
 export async function warpingFeeMatchTx(db: Db, invoiceId: string): Promise<WarpingFeeMatchDto | null> {
-  const inv = await db.invoice.findUnique({ where: { id: invoiceId }, select: { currency: true, subtotal: true, discountTotal: true, warpingReceiptLinks: { select: { warpingReceiptKey: true } } } });
+  const inv = await db.invoice.findUnique({ where: { id: invoiceId }, select: { currency: true, subtotal: true, warpingReceiptLinks: { select: { warpingReceiptKey: true } } } });
   if (!inv) throw AppError.notFound("Fatura bulunamadı.");
   const keys = inv.warpingReceiptLinks.map((l) => l.warpingReceiptKey);
   if (keys.length === 0) return null;
   const fees: WarpingOrderFee[] = await loadWarpingOrderFeesTx(db, { receiptKeys: keys }, { reworkBillable: await readDevereReworkBillable(db) });
   const tolerancePct = await readFinanceInvoicePriceTolerancePct(db);
-  const net = D(inv.subtotal).minus(inv.discountTotal);
+  const net = invoiceNetExVat(inv);
   const warnings: string[] = [];
   let total = D(0);
   let missingPrice = false;

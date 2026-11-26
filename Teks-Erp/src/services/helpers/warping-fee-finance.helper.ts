@@ -7,6 +7,7 @@
 // =============================================================================
 import { InvoiceStatus, InvoiceType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
+import { invoiceNetExVat } from "./invoice-net.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -32,7 +33,7 @@ export async function readWarpingReceiptInvoices(db: Db, receiptKeys: string[]):
   });
   return rows.map((r) => ({
     invoiceId: r.id,
-    netTry: new Prisma.Decimal(r.subtotal).mul(r.exchangeRate),
+    netTry: invoiceNetExVat(r).mul(r.exchangeRate),
     receiptKeys: [...new Set(r.warpingReceiptLinks.map((l) => l.warpingReceiptKey))].sort(),
   }));
 }
