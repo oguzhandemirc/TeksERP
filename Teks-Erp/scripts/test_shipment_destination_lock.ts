@@ -35,6 +35,8 @@
 // Açık niyet sondaları (S5, geri alındı → 51/0): ⑩ yazardaki `!p.chosen` koşulu düştü → 12d/13b/13d ❌ ·
 //   ⑪ koşul çağırana taşındı → 12d/12e/13d ❌ · ⑫ Zod `z.boolean()` (false kabul) → 14b/14d ❌
 // Hızlı Sevk ilk seçimi (karar A, geri alındı → 55/0): ⑬ kilit ucunda `quickShipPickExportReason` hep null → 7e ❌
+// Tanım sayacı (2026-11-26, geri alındı → 56/0): ⑭ `shipping/fields.ts`e ikinci `export const claimFirstDestinationTx =
+//   async` → 12a ❌ (2) · eski sayaç (yalnız `export async function`) 12z sentetik biçimlerinde 2,0,0,0,0 → ❌
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
@@ -55,6 +57,13 @@ let fail = 0;
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
+}
+
+/** Üst düzey tanım sayısı: `export [async] function ad(` ve `export const ad[: T] = [async] (` biçimlerinin hepsi. */
+function tanimSayisi(metin: string, ad: string): number {
+  const fn = new RegExp(`^\\s*export\\s+(?:async\\s+)?function\\s+${ad}\\s*[(<]`, "gm");
+  const ok = new RegExp(`^\\s*export\\s+(?:const|let)\\s+${ad}\\s*(?::[^=\\n]+)?=\\s*(?:async\\b|\\(|function\\b)`, "gm");
+  return (metin.match(fn)?.length ?? 0) + (metin.match(ok)?.length ?? 0);
 }
 
 const TS = Date.now().toString(36);
@@ -302,7 +311,11 @@ async function main() {
 
   // 12) tek yazar — ilk seçim claim'i kaynakta tek tanım, iki çağrı (kurulum + setDestination)
   const src = sevkiyatServisMetni(); // sevkiyat servisi bölündü (2026-11-08): aile metni; gövdeler alan modüllerinde
-  const tanim = src.match(/export async function claimFirstDestinationTx\(/g)?.length ?? 0;
+  const tanim = tanimSayisi(src, "claimFirstDestinationTx");
+  // Kalıcı sonda: sayaç her tanım biçimini görür (yalnız `export async function` arasaydı ikinci kopya kaçardı).
+  const sonda = ["export async function x(", "export function x(", "export const x = async (", "export const x = (", "export const x: F = async ("]
+    .map((m) => tanimSayisi(`${m}) {}\n${m}) {}`, "x"));
+  check("12z tanım sayacı bütün biçimleri sayar (sentetik ikili kopya = 2)", sonda.every((n) => n === 2), sonda.join(","));
   const govde = (ad: string) => sevkiyatServisUyeMetni(ad);
   const cagiranlar = ["decideShipmentDestinationTx", "setDestination"].filter((ad) => govde(ad).includes("this.claimFirstDestinationTx("));
   // Yalnız WHERE içindeki koşul sayılır (audit `oldData`sı değil): updateMany({ where: { …defaultDestination: null
