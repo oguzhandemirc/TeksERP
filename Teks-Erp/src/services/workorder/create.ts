@@ -352,7 +352,7 @@ export async function prepareCreate(this: WorkOrderServiceThis, data: WorkOrderC
     // Kart kullanımı (URUN-YASAM-DONGUSU.md §4): okutulan toplar ya da açık sipariş
     // satırı = mevcut malı/belgeyi yürütür (E); topsuz+siparişsiz iş emri = yeni plan (A3).
     const woItemUsage: ItemUsage = goods || allocations.length > 0 ? "EXISTING_GOODS" : "NEW_PLAN";
-    if (resolvedTargetItemId) await assertItemUsable(prisma, resolvedTargetItemId, woItemUsage);
+    if (resolvedTargetItemId) await assertItemUsable(prisma, resolvedTargetItemId, woItemUsage, { workOrderTarget: true });
 
     // ORDER_PRODUCTION'da hedef ürün+renk+özellikleri orderLine'lardan otomatik
     // türet/doğrula. Tüm bağlı satırların aynı item+color olması beklenir.
@@ -582,7 +582,7 @@ export async function prepareCreate(this: WorkOrderServiceThis, data: WorkOrderC
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
 export async function insertPreparedTx(this: WorkOrderServiceThis, tx: Prisma.TransactionClient, prep: PreparedWorkOrder, userId?: string, numberDb: Pick<typeof prisma, "workOrder"> = prisma) {
     const { data, type, customerId, finalSteps, allocations, resolvedTargetItemId, woItemUsage, resolvedTargetColorId, targetPropertyIds, targetValues, manualWorkOrderNumber, defaultTargetItem } = prep;
-    if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage);
+    if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, woItemUsage, { workOrderTarget: true });
     const workOrderNumber = manualWorkOrderNumber ?? (await this.generateWorkOrderNumber(numberDb));
     // Gevşek model: per-kalem aşırı-tahsis kontrolü YOK. Sipariş bağı yalnız
     // "bu iş emri hangi siparişler için" niyetidir (metraj taşımaz); fazla

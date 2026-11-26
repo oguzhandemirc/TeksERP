@@ -16,6 +16,7 @@ import { matchesPermission } from "../middlewares/rbac.middleware";
 import { SETTING_KEYS, readDokumaEnabled, resolveDokumaRollBirth } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
+import { assertNoBareFilterParams } from "../utils/query-parser";
 import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -598,6 +599,8 @@ export class InventoryController {
     try {
       // Yalnız `filter[mulkiyet]` okunur (servis liste/şeritle aynı okuyucudan geçirir, tanınmayan 400);
       // sorgunun geri kalanı bu uçta hep yok sayıldı — tam çözümleme ilgisiz parametrede 400 üretirdi.
+      // Çıplak `?mulkiyet=` ise sessizce TÜMÜ sayardı → 400 BARE_FILTER_PARAM (fail-closed).
+      assertNoBareFilterParams(req, ["mulkiyet"]);
       const result = await this.service.getWarehouseScope(req.query["filter[mulkiyet]"]);
       res.status(200).json(result);
     } catch (error) {
