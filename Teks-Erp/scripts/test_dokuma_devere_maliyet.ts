@@ -207,14 +207,14 @@ async function main(): Promise<void> {
     const tablo = weavingEfficiencyTable(report([w1]));
     const keys = tablo.kolonlar.map((k) => k.anahtar);
     check("§1d kolonlar: 'Devere /m' + 'Devere kaynağı' Durum'dan önce; eski kolonlar aynı sırada",
-      keys.join(",") === "is,urun,tezgah,standartM,gercekM,fark,farkYuzde,teorikMSaat,gercekMSaat,durusPayi,kosumluM,kosumsuzM,devereM,devereKaynak,cozguIplikM,cozguIplikKaynak,durum"
+      keys.join(",") === "is,urun,tezgah,standartM,gercekM,fark,farkYuzde,teorikMSaat,gercekMSaat,durusPayi,kosumluM,kosumsuzM,devereM,devereKaynak,cozguIplikM,cozguIplikKaynak,atkiIplikM,atkiIplikKaynak,durum"
         && tablo.kolonlar.find((k) => k.anahtar === "devereM")?.baslik === "Devere /m" && tablo.kolonlar.find((k) => k.anahtar === "devereKaynak")?.baslik === "Devere kaynağı");
 
     console.log("\n§10 — iş emri ayrıntısı ucu (DTO)");
     const dto = await getWeavingOrderActualCost(L1.woId);
     const dv = dto.satirlar.find((x) => x.anahtar === "DEVERE");
-    check("§10a ⭐ DTO satırları Tezgâh · Devere · Çözgü ipliği; Devere gerçekleşen 5,25 TL/m, kaynak 'fatura', tahmini değil, standart karşılık YOK (null, 0 değil)",
-      dto.satirlar.map((x) => x.anahtar).join(",") === "TEZGAH,DEVERE,COZGU_IPLIGI" && dv?.gercekTlM === "5.25" && dv.kaynak === "fatura" && dv.tahmini === false && dv.standartTlM === null && dv.eksik.length === 0,
+    check("§10a ⭐ DTO satırları Tezgâh · Devere · Çözgü ipliği · Atkı ipliği; Devere gerçekleşen 5,25 TL/m, kaynak 'fatura', tahmini değil, standart karşılık YOK (null, 0 değil)",
+      dto.satirlar.map((x) => x.anahtar).join(",") === "TEZGAH,DEVERE,COZGU_IPLIGI,ATKI_IPLIGI" && dv?.gercekTlM === "5.25" && dv.kaynak === "fatura" && dv.tahmini === false && dv.standartTlM === null && dv.eksik.length === 0,
       JSON.stringify(dv));
     check("§10b DTO notu devere için standart kalemin seçilemediğini söyler; iş no ve top metresi tek kaynaktan",
       dto.notlar.some((n) => /standart maliyette ayrı kalem seçilemiyor/.test(n)) && dto.isEmriId === L1.woId && dto.topMetre === "100");
@@ -367,7 +367,7 @@ async function main(): Promise<void> {
       w1off.warpingCostTry === null && w1off.warpingMissing === null && w1off.warpingSource === null && eq(w1off.totalMeters, 150)
         && cell(w1off, "devereM") === null && cell(w1off, "devereKaynak") === null && weavingEfficiencyTable(report([w1off])).kolonlar.some((k) => k.anahtar === "devereM"));
     const dtoOff = await getWeavingOrderActualCost(L1.woId);
-    check("§9b devere kapalı → iş emri ayrıntısında yalnız Tezgâh satırı (devere/iplik satırı yok)", dtoOff.satirlar.map((x) => x.anahtar).join(",") === "TEZGAH");
+    check("§9b devere kapalı → iş emri ayrıntısında devere/çözgü ipliği satırı yok (atkı ipliği devereden bağımsız kalır)", dtoOff.satirlar.map((x) => x.anahtar).join(",") === "TEZGAH,ATKI_IPLIGI");
     await setSetting(SETTING_KEYS.DEVERE_ENABLED, "true");
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { rollId: { in: rollIds }, reversesEventId: { not: null } } });

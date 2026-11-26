@@ -38,6 +38,8 @@ const MISSING_TEXT: Record<WeavingActualMissing, string> = {
   IPLIK_FIYATI: "çözgü ipliği fiyatı yok",
   VARYANT_STANDART_YOK: "varyantın standart maliyeti yok, desen geneli kullanıldı",
   MUSTERI_IPLIGI: "müşteri ipliği (maliyetimize girmez)",
+  ATKI_FIYATI: "atkı ipliği fiyatı yok",
+  ATKI_NORMU: "standart maliyette atkı ipliği satırı yok",
 };
 const isInfo = (m: WeavingActualMissing): boolean => WEAVING_INFO_CODES.includes(m);
 
@@ -55,6 +57,13 @@ export const warpYarnView = (w: WeavingActualCost): WarpShareView => ({
   perMTry: w.warpYarnPerMTry, costTry: w.warpYarnCostTry, coveredMeters: w.warpYarnCoveredMeters, missing: w.warpYarnMissing,
   // Bilgi kodu (müşteri ipliği) kaynağın parçasıdır, eksik listesine girmez.
   sourceText: [w.warpYarnSource ? WARP_YARN_SOURCE_TEXT[w.warpYarnSource] : null, ...(w.warpYarnMissing ?? []).filter(isInfo).map((m) => MISSING_TEXT[m])]
+    .filter((t): t is string => t !== null).join(" · ") || null,
+});
+/** Atkının miktarı her zaman normdur (tartılmaz); kaynak metni bunu söyler. */
+export const WEFT_YARN_SOURCE_TEXT = { LOT: "son giren lotun fiyatı × norm miktar", MALIYET_FIYATI: "maliyet kartı fiyatı × norm miktar (tahmini)", KARMA: "karma × norm miktar (kısmen tahmini)" } as const;
+export const weftYarnView = (w: WeavingActualCost): WarpShareView => ({
+  perMTry: w.weftYarnPerMTry, costTry: w.weftYarnCostTry, coveredMeters: w.weftYarnCoveredMeters, missing: w.weftYarnMissing,
+  sourceText: [w.weftYarnSource ? WEFT_YARN_SOURCE_TEXT[w.weftYarnSource] : null, ...(w.weftYarnMissing ?? []).filter(isInfo).map((m) => MISSING_TEXT[m])]
     .filter((t): t is string => t !== null).join(" · ") || null,
 });
 
@@ -133,6 +142,8 @@ export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
       { anahtar: "devereKaynak", baslik: "Devere kaynağı" },
       { anahtar: "cozguIplikM", baslik: "Çözgü ipliği /m", birim: unit, hiza: "sag" },
       { anahtar: "cozguIplikKaynak", baslik: "Çözgü ipliği kaynağı" },
+      { anahtar: "atkiIplikM", baslik: "Atkı ipliği /m", birim: unit, hiza: "sag" },
+      { anahtar: "atkiIplikKaynak", baslik: "Atkı ipliği kaynağı" },
       { anahtar: "durum", baslik: "Durum" },
     ],
     satirlar: r.rows.map((w) => {
@@ -155,6 +166,8 @@ export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
         devereKaynak: shareSourceText(warpingView(w), w.totalMeters),
         cozguIplikM: shareMoney(warpYarnView(w), r),
         cozguIplikKaynak: shareSourceText(warpYarnView(w), w.totalMeters),
+        atkiIplikM: shareMoney(weftYarnView(w), r),
+        atkiIplikKaynak: shareSourceText(weftYarnView(w), w.totalMeters),
         durum: rowStatus(w, r),
       };
     }),
@@ -177,6 +190,8 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
   if (estimatedWarping > 0) warnings.push(`${estimatedWarping} işin devere maliyeti, faturası henüz onaylanmadığı için devere siparişindeki ücretten tahmin edildi.`);
   const estimatedYarn = r.rows.filter((w) => w.warpYarnSource === "MALIYET_FIYATI" || w.warpYarnSource === "KARMA").length;
   if (estimatedYarn > 0) warnings.push(`${estimatedYarn} işin çözgü ipliği maliyeti, lotun mal kabul fiyatı bulunamadığı için maliyet kartındaki iplik fiyatından tahmin edildi.`);
+  const estimatedWeft = r.rows.filter((w) => w.weftYarnSource === "MALIYET_FIYATI" || w.weftYarnSource === "KARMA").length;
+  if (estimatedWeft > 0) warnings.push(`${estimatedWeft} işin atkı ipliği maliyeti, ipliğin lot fiyatı bulunamadığı için maliyet kartındaki iplik fiyatından tahmin edildi.`);
   if (timeSource === "NORM") warnings.push("Tezgâh süresi metre normundan hesaplandı (Kârlılık makine süresi ayarı: NORM).");
   return {
     anahtar: WEAVING_EFFICIENCY_KEY,
@@ -193,12 +208,13 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
     tablo: weavingEfficiencyTable(r),
     tanimlar: [
       { ad: "Standart dokuma", aciklama: "Ürünün etkin standart maliyet sürümündeki dokuma satırları: tezgâh, işçilik, enerji ya da atkı ücreti." },
-      { ad: "Gerçek dokuma", aciklama: "İşin koşumlarındaki tezgâh saati çarpı tezgâhın o tarihteki saat ücreti, işin iptal edilmemiş toplarının metresine bölünür (boyahaneye ya da tambura geçmiş ham top da sayılır). Atkı ipliği tartılmaz; iplik bu rapora girmez." },
+      { ad: "Gerçek dokuma", aciklama: "İşin koşumlarındaki tezgâh saati çarpı tezgâhın o tarihteki saat ücreti, işin iptal edilmemiş toplarının metresine bölünür (boyahaneye ya da tambura geçmiş ham top da sayılır). İplik bu sayıya girmez; çözgü ve atkı ipliği ayrı kolonlardadır." },
       { ad: "Satır kapsamı", aciklama: "Dönem yalnız işi seçer; satırdaki saat, maliyet ve metre işin tüm ömrüdür. Sapma ana sayısına yalnız bitmiş işler girer." },
       { ad: "Kur", aciklama: "TL dışı sunumda standart ve gerçek tutarlar günün kuruyla çevrilir; standart maliyet ekranındaki donmuş sürüm kurundan farklı olabilir, fark yüzdesi etkilenmez." },
       { ad: "Koşumsuz top", aciklama: "Kalite girişinde işe bağlanan ama tezgâhı bilinmeyen top. İşin hiç koşumu yoksa gerçek maliyet ölçülemez." },
       { ad: "Devere", aciklama: "Fason devere (çözgü sarımı) bedeli, topun tükettiği çözgü metresi kadar: onaylı devereci faturasının KDV hariç tutarı × fatura kuru, leventin sarılan metresine bölünür. Fatura yoksa, taslaksa ya da iptal edildiyse devere siparişindeki ücret × kabul günü kuruyla tahmin edilir. Metre, çözgü tüketimi yazılmış topların kumaş metresidir; tüketimi yazılmamış top (levent otomatik tüketimi kapalı ya da tezgâhta bağlı levent yok) bu hesaba girmez ve \"eksik: çözgü tüketimi\" yazılır. Kendi devere makinemizde sarılan leventin fason bedeli yoktur. Tezgâh sapmasına eklenmez." },
-      { ad: "Çözgü ipliği", aciklama: "Leventin sarımında yazılan iplik kilosu (iplik başına) × lot fiyatı (lotun mal kabul fiyatı × kabul günü kuru), devere siparişinin iplik firesi leventlere sarım metresi payıyla eklenir; leventin sarılan metresine bölünür ve topun tükettiği çözgü metresi kadar topa yazılır. Lot fiyatı yoksa maliyet kartındaki iplik fiyatıyla tahmin edilir. Müşterinin ipliğiyle sarılan levent bizim maliyetimize girmez, \"müşteri ipliği\" yazılır (eksik değildir). Atkı ipliği tartılmadığı için bu kolona girmez. Tezgâh sapmasına eklenmez." },
+      { ad: "Çözgü ipliği", aciklama: "Leventin sarımında yazılan iplik kilosu (iplik başına) × lot fiyatı (lotun mal kabul fiyatı × kabul günü kuru), devere siparişinin iplik firesi leventlere sarım metresi payıyla eklenir; leventin sarılan metresine bölünür ve topun tükettiği çözgü metresi kadar topa yazılır. Lot fiyatı yoksa maliyet kartındaki iplik fiyatıyla tahmin edilir. Müşterinin ipliğiyle sarılan levent bizim maliyetimize girmez, \"müşteri ipliği\" yazılır (eksik değildir). Atkı ipliği bu kolona girmez. Tezgâh sapmasına eklenmez." },
+      { ad: "Atkı ipliği", aciklama: "Atkı tartılmadığı için miktar NORMDUR: standart maliyetteki atkı ipliği miktarı (metre başı) × topun metresi. Yalnız fiyat gerçektir: topun doğduğu ana kadar o ipliğin son giren lotunun mal kabul fiyatı (× kabul günü kuru). Lot fiyatı yoksa maliyet kartındaki iplik fiyatıyla tahmin edilir; ikisi de yoksa \"eksik\" yazılır. Son giren lot müşterinin ipliğiyse bizim maliyetimize girmez, \"müşteri ipliği\" yazılır (eksik değildir). Tezgâh sapmasına eklenmez." },
       { ad: "Duruş payı", aciklama: "Kapanmış koşumlarda duruş süresinin koşum süresine oranı." },
       { ad: EKSIK, aciklama: "Kur, saat ücreti, koşum ya da standart maliyet bulunamadığı için değer hesaplanamadı; sıfır demek değildir." },
     ],

@@ -38,16 +38,20 @@ describe("WeavingCostSection — gerçekleşen (devere maliyet dilim 2-3)", () =
         actualRow({ anahtar: "TEZGAH", ad: "Tezgâh (dokuma)", standartTlM: "3", gercekTlM: "2.5", kaynak: "koşum süresi × tezgâh saat ücreti" }),
         actualRow({ anahtar: "DEVERE", ad: "Devere (çözgü sarımı)", standartTlM: null, gercekTlM: "5.25", kaynak: "tarife (tahmini)", tahmini: true }),
         actualRow({ anahtar: "COZGU_IPLIGI", ad: "Çözgü ipliği", standartTlM: "4", gercekTlM: null, kaynak: null, eksik: ["çözgü ipliği fiyatı yok"] }),
+        actualRow({ anahtar: "ATKI_IPLIGI", ad: "Atkı ipliği (norm miktar)", standartTlM: "3", gercekTlM: null, kaynak: "müşteri ipliği (maliyetimize girmez)" }),
       ],
       notlar: ["Devere için standart maliyette ayrı kalem seçilemiyor; karşılaştırma yapılmaz."],
     });
     renderWithProviders(<WeavingCostSection itemId="i1" weavingOrderId="w1" />);
-    expect(await screen.findAllByTestId("wo-actual-row")).toHaveLength(3);
+    expect(await screen.findAllByTestId("wo-actual-row")).toHaveLength(4);
     expect(actual).toHaveBeenCalledWith("w1");
     expect(screen.getByTestId("wo-actual-DEVERE")).toHaveTextContent("5,25 TL/m");
     expect(screen.getAllByTestId("wo-actual-estimated")).toHaveLength(1);
     expect(screen.getByTestId("wo-actual-COZGU_IPLIGI")).toHaveTextContent("eksik");
     expect(screen.getByText("eksik: çözgü ipliği fiyatı yok")).toBeInTheDocument();
+    // Müşteri ipliği: sayı yok, eksik de değil → "—" (0 ya da "eksik" yazılmaz), kaynak bilgiyi söyler.
+    expect(screen.getByTestId("wo-actual-ATKI_IPLIGI")).toHaveTextContent("—");
+    expect(screen.getByText("müşteri ipliği (maliyetimize girmez)")).toBeInTheDocument();
     expect(screen.getByTestId("wo-actual-notes")).toHaveTextContent("ayrı kalem seçilemiyor");
     expect(screen.getByText("Maliyet")).toBeInTheDocument();
   });
