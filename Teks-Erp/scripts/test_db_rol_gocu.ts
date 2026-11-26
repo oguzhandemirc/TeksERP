@@ -94,7 +94,8 @@ function korumaOku(url: string): { level: string; writeOnly: boolean } | null {
   try {
     const out = execFileSync("npx", ["tsx", "-e",
       'require("./src/services/audit-chain.service").readAuditProtection().then(r=>{console.log("SONUC"+JSON.stringify(r));process.exit(0)})'],
-    { cwd: ROOT, env: { ...process.env, DATABASE_URL: url }, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    // Zaman aşımı: asılan çocuk koşucunun 180 s SIGTERM'ine kalırsa finally (temizlik) hiç koşmaz.
+    { cwd: ROOT, env: { ...process.env, DATABASE_URL: url }, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 60_000 });
     const m = /SONUC(\{.*\})/.exec(out);
     return m ? JSON.parse(m[1]) : null;
   } catch { return null; }
@@ -111,9 +112,20 @@ async function main(): Promise<void> {
   // G5: rol göçü okuma rolünü de kurar — küme geneli ad koşuma özgü olmalı (varsayılan `<sahip>_okuma` değil).
   const okr = `tekserp_g4okr${process.pid}_test`;
   const tmpTablo = `g4rol_tmp_${process.pid}`;
+  // Sonda tablosu bekçiye ait şemada: koşum öldürülürse (finally koşmaz) artık public'e sızıp
+  // aynı DB'de sonra koşan test_schema_drift'i kırmızıya düşürmesin (PR #931 CI, 2026-11-26).
+  const tmpSema = tmpTablo;
+  const tmpNitelikli = `"${tmpSema}"."${tmpTablo}"`;
   const sahip = new Client({ connectionString: pgUrl(ownerUrl) });
   await sahip.connect();
   const roleExists = async (ad: string) => (await sahip.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [ad])).rowCount === 1;
+  // Önceki öldürülmüş koşumların artık sonda şemalarını süpür (public'teki eski sızıntı dahil).
+  for (const r of (await sahip.query<{ s: string }>(`SELECT nspname AS s FROM pg_namespace WHERE nspname ~ '^g4rol_tmp_[0-9]+$'`)).rows) {
+    await sahip.query(`DROP SCHEMA IF EXISTS ${quoteIdent(r.s)} CASCADE`).catch(() => undefined);
+  }
+  for (const r of (await sahip.query<{ t: string }>(`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' AND tablename ~ '^g4rol_tmp_[0-9]+$'`)).rows) {
+    await sahip.query(`DROP TABLE IF EXISTS public.${quoteIdent(r.t)}`).catch(() => undefined);
+  }
   try {
     // ── §2 KURU ──
     const kuruLog: string[] = [];
@@ -175,8 +187,9 @@ async function main(): Promise<void> {
     // ── §5 bozulmuş durum → ölçüm kırmızı → yeniden koşum onarır ──
     await sahip.query(`GRANT UPDATE, DELETE ON system_logs TO "${rol}"`);
     check("§5a ⭐ sonda: DELETE/UPDATE yetkisi geri gelince ölçüm 'kurcalayabilir' der", url ? await kurcalayabilir(url) : false);
-    await sahip.query(`CREATE TABLE "${tmpTablo}" (x int)`);
-    await sahip.query(`ALTER TABLE "${tmpTablo}" OWNER TO "${rol}"`);
+    await sahip.query(`CREATE SCHEMA "${tmpSema}"`);
+    await sahip.query(`CREATE TABLE ${tmpNitelikli} (x int)`);
+    await sahip.query(`ALTER TABLE ${tmpNitelikli} OWNER TO "${rol}"`);
     const sahipAdi = (await sahip.query("SELECT current_user AS u")).rows[0].u as string;
     await sahip.query(`GRANT "${sahipAdi}" TO "${rol}"`);
     const bozuk = await measureRoleState(sahip, rol);
@@ -201,7 +214,7 @@ async function main(): Promise<void> {
     const p2 = korumaOku(ownerUrl);
     check("§7b sahip rolünde (geri düşüş) writeOnly=false → 'kismi'", p2?.writeOnly === false && p2.level === "kismi", JSON.stringify(p2));
   } finally {
-    await sahip.query(`DROP TABLE IF EXISTS "${tmpTablo}"`).catch(() => undefined);
+    await sahip.query(`DROP SCHEMA IF EXISTS "${tmpSema}" CASCADE`).catch(() => undefined);
     await sahip.query(`DROP FUNCTION IF EXISTS public.okuma_rolu_parola(text)`).catch(() => undefined);
     // Göç advisory kilitlerini PUBLIC'ten aldı; test DB'si sonraki bekçiler için eski hâline döner.
     for (const r of (await sahip.query(ADVISORY_FUNCTION_SQL)).rows) {
