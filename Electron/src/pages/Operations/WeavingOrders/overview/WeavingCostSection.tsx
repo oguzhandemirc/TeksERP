@@ -1,5 +1,6 @@
 // SY-D4: dokuma iş emri panelinde "Maliyet" bölümü — ürünün YÜRÜRLÜKTEKİ standart sürümü ve dokuma satırları
-// (sayılar kayıtlı sürümden; panel hesaplamaz). Modül kapalı ya da `cost:read` yoksa sorgu ATILMAZ, bölüm çizilmez.
+// (sayılar kayıtlı sürümden; panel hesaplamaz) + iş emri verilirse gerçekleşen tablosu (devere maliyet dilim 2-3).
+// Modül kapalı ya da `cost:read` yoksa sorgu ATILMAZ, bölüm çizilmez.
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useMaliyetEnabled } from "@/hooks/usePricingEnabled";
@@ -8,11 +9,12 @@ import { V3Section } from "@/pages/Operations/WorkOrders/detail-v3/V3Section";
 import { costItemService } from "@/pages/Cost/Items/service";
 import { fmtDecFull } from "@/pages/Cost/shared/format";
 import { COMPONENT_LABEL } from "@/pages/Cost/shared/labels";
+import { WeavingActualCost } from "./WeavingActualCost";
 
 /** Dokuma grubunun bileşenleri (backend `cost-component-groups.helper` → `dokumaTl` aynası). */
 export const WEAVING_COMPONENTS: ReadonlySet<string> = new Set(["LOOM_MACHINE", "LOOM_LABOR", "ENERGY", "BEAM_PREP", "WEAVING_PICK"]);
 
-export function WeavingCostSection({ itemId }: { itemId: string }) {
+export function WeavingCostSection({ itemId, weavingOrderId }: { itemId: string; weavingOrderId?: string }) {
   const moduleOpen = useMaliyetEnabled();
   const { hasPermission } = useRoleAccess();
   const enabled = moduleOpen && hasPermission("cost:read");
@@ -25,7 +27,7 @@ export function WeavingCostSection({ itemId }: { itemId: string }) {
   const v = q.data?.aktifSurum ?? null;
   const lines = (v?.satirlar ?? []).filter((l) => WEAVING_COMPONENTS.has(l.bilesen));
   return (
-    <V3Section title="Maliyet (standart)">
+    <V3Section title="Maliyet">
       <div className="card" data-testid="wo-cost">
         {q.isError ? (
           <div className="emptybox">Maliyet okunamadı.</div>
@@ -52,6 +54,7 @@ export function WeavingCostSection({ itemId }: { itemId: string }) {
             ))}
           </>
         )}
+        {weavingOrderId && <WeavingActualCost weavingOrderId={weavingOrderId} />}
         <div className="order">
           <Link className="text-xs underline" to={`/cost/items/${itemId}`} data-testid="wo-cost-link">Maliyet kartına git</Link>
         </div>

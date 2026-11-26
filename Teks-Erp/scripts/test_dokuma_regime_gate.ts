@@ -87,7 +87,10 @@ const MOBIL_SRC = path.join(KOK, "mobil/src");
 
 /** Dokuma kapısını TAŞIMASI GEREKEN router'lar (mount adresiyle). */
 /** Kapıyı uç seviyesinde taşıyan karma router'lar (aynı dosyada dokuma dışı uç var) — §6u. */
-const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[] }> = [
+// `sonra`: kapıdan SONRA gelmesi gereken zincir halkası (varsayılan rapor kapısı; rapor olmayan uçta izin guard'ı).
+const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[]; sonra?: string }> = [
+  // Devere maliyet dilim 2: maliyet router'ında (toplu maliyet kapısı) iş emri gerçekleşen ucu dokuma kapısını da taşır.
+  { dosya: "routes/cost.routes.ts", yollar: ["/weaving-orders/:id/actual"], sonra: "requirePermission(" },
   { dosya: "routes/reports/temel-dokuma-finans.routes.ts", yollar: ["/dokuma/tezgah-randimani", "/dokuma/duruslar", "/dokuma/levent-dengesi"] },
   // SY-D3: maliyet router'ında (iplik ihtiyacı dokuma dışı) yalnız dokuma verimlilik ucu dokuma kapısını taşır.
   { dosya: "routes/reports/maliyet.report.routes.ts", yollar: ["/dokuma-verimlilik"] },
@@ -359,7 +362,7 @@ async function main(): Promise<void> {
     for (const yol of u.yollar) {
       const satir = metin.split("\n").find((l) => l.includes(`router.get("${yol}"`)) ?? "";
       const kapiYeri = satir.indexOf(KAPI);
-      const raporKapisi = Math.max(satir.indexOf("reportGate("), satir.indexOf("requireReportOpen("));
+      const raporKapisi = u.sonra ? satir.indexOf(u.sonra) : Math.max(satir.indexOf("reportGate("), satir.indexOf("requireReportOpen("));
       check(`§6u ⭐ ${u.dosya} ${yol} → kapı UÇ zincirinde, rapor kapısından ÖNCE`, kapiYeri > 0 && raporKapisi > kapiYeri, satir ? "" : "uç bulunamadı");
     }
   }

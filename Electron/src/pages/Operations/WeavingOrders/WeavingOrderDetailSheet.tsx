@@ -116,7 +116,7 @@ export function WeavingOrderDetailSheet({ order, onClose, onEdit, onCloseOrder, 
               <ConstructionVisualSection weavingOrderId={wo.id} weavingOrderNumber={wo.weavingOrderNumber} itemId={wo.item.id} onNavigate={onClose} />
               <WarpNeedSection weavingOrderId={wo.id} isOpen={WEAVING_STATUS_META[wo.status]?.open ?? false} onNavigate={onClose} />
               {wo.orderLines && <OrderLinesSection lines={wo.orderLines} />}
-              <WeavingCostSection itemId={wo.item.id} />
+              <WeavingCostSection itemId={wo.item.id} weavingOrderId={wo.id} />
               {wo.status === "CANCELLED" && wo.cancelReason && (
                 <div className="card emptybox">İptal gerekçesi: {wo.cancelReason}</div>
               )}
