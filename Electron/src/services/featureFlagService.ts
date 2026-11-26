@@ -346,6 +346,8 @@ export interface FeatureFlags {
   costProfitMachineTime: "OTURUM" | "VARDIYA" | "NORM";
   /** D4-G2b: genel gider dağıtım anahtarı (backend aynası; varsayılan `YOK` = dağıtılmaz). */
   costProfitOverheadKey: "YOK" | "METRE" | "GELIR" | "MAKINE_SAATI";
+  /** K1 dilim 2: Kârlılık ekranının açılış kapsamı (backend aynası; varsayılan `HIZMET` = bugünkü tablo). */
+  costProfitDefaultScope: "HIZMET" | "KUMAS";
   /** D4-G2b: masraf kategorisi → sınıf (backend aynası; varsayılan `{}` = her kategori genel gider). */
   costProfitCategoryClasses: Record<string, "ISCILIK" | "GENEL_GIDER" | "HARIC">;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default

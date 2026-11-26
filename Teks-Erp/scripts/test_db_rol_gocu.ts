@@ -13,9 +13,10 @@
 // süper olmayan sahip rolle migrate deploy edilmiş geçici DB'de süper bağlantı + açık sahip —
 // REASSIGN/DEFAULT PRIVILEGES/advisory GRANT sahibe gider, sahip uyuşmazlığı · süper olmayan bağlantı ·
 // yanlış sahip parolası → 2, CLI URL/parolayı yalnız ortamdan/kimlik dosyasından alır.
-// Rol küme geneli: ad koşuma özgü (`_test` sonekli), finally'de DROP OWNED + DROP ROLE.
+// Rol küme geneli: ad koşuma özgü (`_test` sonekli), finally'de DROP OWNED + DROP ROLE; §0 öldürülmüş
+// koşumun artık rollerini açılışta süpürür (oturumsuz, sahipsiz, başka DB'de bağsız olanları).
 // =============================================================================
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -70,6 +71,8 @@ function statik(): void {
   const betikler = ["../deploy/kur.ps1", "../deploy/kurulum/kurulum.ps1", "../deploy/ilk-kurulum.ps1"]
     .filter((b) => oku(b).includes("db-rol-gocu"));
   check("§1g Windows kipi bu sürümde hiçbir kurulum betiğinden çağrılmaz (aktivasyon 2.15.8)", betikler.length === 0, betikler.join(" "));
+  // AST mandalı (test_process_exit_kalibi) dize içindeki çocuk kodunu görmez; burada ölçülür.
+  check("§1h /health çocuğu doğal çıkar (process.exit yok — V8 çıkış kilitlenmesi)", !/process\.exit\s*\(/.test(KORUMA_COCUK_KODU));
 }
 
 async function hataKodu(c: Client, sql: string): Promise<string> {
@@ -89,16 +92,39 @@ async function kurcalayabilir(url: string): Promise<boolean> {
   try { return (await c.query(AUDIT_TAMPER_SQL)).rows[0].tamper === true; } finally { await c.end(); }
 }
 
-/** /health'in kendi okuyucusu, verilen URL'le ayrı süreçte (prisma tekili açılışta DATABASE_URL okur). */
-function korumaOku(url: string): { level: string; writeOnly: boolean } | null {
-  try {
-    const out = execFileSync("npx", ["tsx", "-e",
-      'require("./src/services/audit-chain.service").readAuditProtection().then(r=>{console.log("SONUC"+JSON.stringify(r));process.exit(0)})'],
-    // Zaman aşımı: asılan çocuk koşucunun 180 s SIGTERM'ine kalırsa finally (temizlik) hiç koşmaz.
-    { cwd: ROOT, env: { ...process.env, DATABASE_URL: url }, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 60_000 });
-    const m = /SONUC(\{.*\})/.exec(out);
-    return m ? JSON.parse(m[1]) : null;
-  } catch { return null; }
+/** Çocuğun DB oturumları bu adla işaretlenir: asılırsa teşhis yalnız onları gösterir. */
+const KORUMA_APP = "bekci_g4_koruma";
+const KORUMA_SURE_MS = 60_000;
+/** Çocuk komutu. `process.exit` YOK: Node'da çıkış anı V8 arka plan iş parçacığını join ederken
+ *  karşılıklı beklemeye düşebiliyor (arşiv 2026-09-23 / 2026-10-26); havuz allowExitOnIdle → doğal çıkış. */
+const KORUMA_COCUK_KODU =
+  'require("./src/services/audit-chain.service").readAuditProtection().then(r=>{console.log("SONUC"+JSON.stringify(r))}).catch(e=>{console.error(e);process.exitCode=1})';
+
+/** /health'in kendi okuyucusu, verilen URL'le ayrı süreçte (prisma tekili açılışta DATABASE_URL okur).
+ *  Süresinde dönmezse teşhis basar ve öldürür: koşucunun 180 sn SIGTERM'ine kalırsa finally (temizlik) koşmaz. */
+async function korumaOku(url: string, sahip: Client, etiket: string): Promise<{ level: string; writeOnly: boolean } | null> {
+  // Ayrı süreç grubu: asılan torun (npx → tsx → node) stdout borusunu tutar; yalnız npx öldürülürse
+  // torun yetim kalır ve boru açık kaldığı için bekçi de doğal çıkamaz (sondada ölçüldü).
+  const c = spawn("npx", ["tsx", "-e", KORUMA_COCUK_KODU],
+    { cwd: ROOT, env: { ...process.env, DATABASE_URL: url, PGAPPNAME: KORUMA_APP }, stdio: ["ignore", "pipe", "ignore"], detached: true });
+  let out = "";
+  c.stdout.on("data", (d: Buffer) => { out += d.toString("utf8"); });
+  const bitti = new Promise<number | null>((res) => c.on("close", (kod) => res(kod)));
+  let zaman: NodeJS.Timeout | undefined;
+  const sure = await Promise.race([bitti, new Promise<"asildi">((res) => { zaman = setTimeout(() => res("asildi"), KORUMA_SURE_MS); })]);
+  clearTimeout(zaman);
+  if (sure === "asildi") {
+    // Sorgu metni basılmaz (rol göçü ifadeleri parola doğrulayıcısı taşıyabilir); yalnız durum + bekleme + engelleyen.
+    const s = await sahip.query(`SELECT pid, usename, state, wait_event_type, wait_event, pg_blocking_pids(pid) AS engel
+      FROM pg_stat_activity WHERE application_name = $1`, [KORUMA_APP]).catch((e: Error) => ({ rows: [{ hata: e.message }] }));
+    console.log(`! ${etiket} çocuğu ${KORUMA_SURE_MS / 1000} sn'de dönmedi · SONUC basılmıştı=${out.includes("SONUC")}`
+      + ` · oturumlar=${JSON.stringify(s.rows)}`);
+    try { if (c.pid) process.kill(-c.pid, "SIGKILL"); } catch { /* grup zaten bitti */ }
+    c.stdout.destroy();
+    return null;
+  }
+  const m = /SONUC(\{.*\})/.exec(out);
+  return m ? JSON.parse(m[1]) : null;
 }
 
 async function main(): Promise<void> {
@@ -126,7 +152,40 @@ async function main(): Promise<void> {
   for (const r of (await sahip.query<{ t: string }>(`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public' AND tablename ~ '^g4rol_tmp_[0-9]+$'`)).rows) {
     await sahip.query(`DROP TABLE IF EXISTS public.${quoteIdent(r.t)}`).catch(() => undefined);
   }
+  // Öldürülmüş koşumun küme geneli rolleri: yalnız bu desen, oturumu yok, hiçbir nesnenin sahibi değil ve
+  // başka DB'de bağı yok (ortak test PG'sinde başka DB'de koşan eşzamanlı bekçinin rolüne dokunulmaz).
+  const artikRolleriSupur = async (): Promise<string[]> => {
+    const artik = await sahip.query<{ r: string }>(
+      `SELECT rolname AS r FROM pg_roles a
+        WHERE rolname ~ '^tekserp_g4(rol|yab|okr)[0-9]+_test$' AND NOT (rolname = ANY($1::text[]))
+          AND NOT EXISTS (SELECT 1 FROM pg_stat_activity s WHERE s.usename = a.rolname)
+          AND NOT EXISTS (SELECT 1 FROM pg_shdepend d WHERE d.refobjid = a.oid
+                AND (d.deptype = 'o' OR d.dbid NOT IN (0, (SELECT oid FROM pg_database WHERE datname = current_database()))))`,
+      [[rol, yabanci, okr]]);
+    for (const r of artik.rows) {
+      await sahip.query(`DROP OWNED BY ${quoteIdent(r.r)}`).catch(() => undefined);
+      await sahip.query(`DROP ROLE IF EXISTS ${quoteIdent(r.r)}`).catch((e) => console.log(`! artık ${r.r} silinemedi: ${(e as Error).message}`));
+    }
+    return artik.rows.map((r) => r.r);
+  };
+  const sahte = `tekserp_g4rol${process.pid}9_test`;
+  const sahibi = `tekserp_g4okr${process.pid}9_test`;
+  const supurulen = await artikRolleriSupur();
+  if (supurulen.length > 0) console.log(`(önceki öldürülmüş koşumdan ${supurulen.length} artık rol süpürüldü)`);
   try {
+    // ── §0 artık rol süpürgesi: yetkili ama sahipsiz artık gider, nesne sahibi artık KALIR ──
+    await sahip.query(`CREATE ROLE ${quoteIdent(sahte)} NOLOGIN`);
+    await sahip.query(`GRANT SELECT ON system_settings TO ${quoteIdent(sahte)}`);
+    await sahip.query(`CREATE ROLE ${quoteIdent(sahibi)} NOLOGIN`);
+    await sahip.query(`CREATE SCHEMA "${tmpSema}"`);
+    await sahip.query(`CREATE TABLE ${tmpNitelikli} (x int)`);
+    await sahip.query(`ALTER TABLE ${tmpNitelikli} OWNER TO ${quoteIdent(sahibi)}`);
+    const sup = await artikRolleriSupur();
+    check("§0a ⭐ öldürülmüş koşumun artık rolü (yalnız yetkili) süpürülür", sup.includes(sahte) && !(await roleExists(sahte)), sup.join(","));
+    check("§0b nesne sahibi artık rol süpürülmez (DROP OWNED veri silmez)", !sup.includes(sahibi) && (await roleExists(sahibi)));
+    await sahip.query(`DROP SCHEMA IF EXISTS "${tmpSema}" CASCADE`);
+    await sahip.query(`DROP ROLE IF EXISTS ${quoteIdent(sahibi)}`);
+
     // ── §2 KURU ──
     const kuruLog: string[] = [];
     const kuru = await runRoleMigration({ ownerUrl, readRole: okr, rol, uygula: false, log: (m) => kuruLog.push(m) });
@@ -209,9 +268,9 @@ async function main(): Promise<void> {
     check("§6b geçersiz rol adı → 2", s5.kod === EXIT_NOT_APPLICABLE);
 
     // ── §7 /health okuyucusu ──
-    const p1 = url ? korumaOku(url) : null;
+    const p1 = url ? await korumaOku(url, sahip, "§7a") : null;
     check("§7a ⭐ readAuditProtection uygulama rolünde writeOnly=true", p1?.writeOnly === true, JSON.stringify(p1));
-    const p2 = korumaOku(ownerUrl);
+    const p2 = await korumaOku(ownerUrl, sahip, "§7b");
     check("§7b sahip rolünde (geri düşüş) writeOnly=false → 'kismi'", p2?.writeOnly === false && p2.level === "kismi", JSON.stringify(p2));
   } finally {
     await sahip.query(`DROP SCHEMA IF EXISTS "${tmpSema}" CASCADE`).catch(() => undefined);
@@ -220,7 +279,7 @@ async function main(): Promise<void> {
     for (const r of (await sahip.query(ADVISORY_FUNCTION_SQL)).rows) {
       await sahip.query(`GRANT EXECUTE ON FUNCTION pg_catalog.${String(r.f)} TO PUBLIC`).catch(() => undefined);
     }
-    for (const r of [okr, rol, yabanci]) {
+    for (const r of [okr, rol, yabanci, sahte, sahibi]) {
       if (await roleExists(r)) {
         await sahip.query(`DROP OWNED BY "${r}"`).catch(() => undefined);
         await sahip.query(`DROP ROLE "${r}"`).catch((e) => console.log(`! ${r} silinemedi: ${(e as Error).message}`));
@@ -376,7 +435,7 @@ async function windowsKipi(baseUrl: string): Promise<void> {
     const s2 = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: sahip, parola: sahipPass }, rol, readRole: okr, uygula: true, log: bos });
     check("§8p idempotent: ikinci koşum 0, rolü yeniden yaratmaz, aynı URL",
       s2.kod === EXIT_OK && !(s2.statements ?? []).some((x) => x.startsWith("CREATE ROLE")) && s2.appUrl === appUrl);
-    const p = korumaOku(appUrl);
+    const p = await korumaOku(appUrl, su, "§8q");
     check("§8q readAuditProtection Windows kipi uygulama rolünde writeOnly=true", p?.writeOnly === true, JSON.stringify(p));
 
     // ── CLI: URL/parola yalnız ortamdan ya da kimlik dosyasından ──

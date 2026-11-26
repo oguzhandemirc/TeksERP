@@ -14,12 +14,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ItemsPage } from "./ItemsPage";
 import { itemTypeFilterOptions } from "@/components/forms/itemPicker";
-import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, itemTypeChangeParams, itemTypeDefaultFilter, parseItemStatus } from "./itemsFilters";
+import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, itemTypeChangeParams, itemTypeDefaultFilter, legacyServiceListTarget, parseItemStatus } from "./itemsFilters";
 import { labeledSelectText } from "@/components/forms/LabeledSelect";
 import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
 
@@ -122,6 +122,30 @@ describe("ItemsPage — hizmet kartı ayrımı", () => {
     renderPage("/definitions/items?filter[itemType]=YARN");
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
     expect(itemTypeDefaultFilter(new URLSearchParams()).itemType?.split(",")).not.toContain("SERVICE");
+  });
+
+  it("⭐ eski yer imi filter[itemType]=SERVICE → Hizmet Kartları (arama terimi taşınır); başka tür yönlenmez", () => {
+    expect(legacyServiceListTarget(new URLSearchParams("filter[itemType]=SERVICE"))).toBe("/definitions/services");
+    expect(legacyServiceListTarget(new URLSearchParams("filter[itemType]=SERVICE&search=HZM 1"))).toBe("/definitions/services?search=HZM%201");
+    expect(legacyServiceListTarget(new URLSearchParams("filter[itemType]=FABRIC,SERVICE"))).toBe("/definitions/services");
+    expect(legacyServiceListTarget(new URLSearchParams("filter[itemType]=YARN"))).toBeNull();
+    expect(legacyServiceListTarget(new URLSearchParams())).toBeNull();
+  });
+
+  it("⭐ SERVICE adresiyle açılınca ürün listesi istenmez, hizmet ekranına gidilir", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/definitions/items?filter[itemType]=SERVICE"]}>
+          <Routes>
+            <Route path="/definitions/items" element={<ItemsPage />} />
+            <Route path="/definitions/services" element={<p>hizmet-ekrani</p>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("hizmet-ekrani")).toBeTruthy();
+    expect(listCursor).not.toHaveBeenCalled();
   });
 });
 

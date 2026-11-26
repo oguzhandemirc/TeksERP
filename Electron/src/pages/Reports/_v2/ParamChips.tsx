@@ -9,7 +9,7 @@ import { ReportDateFilter } from "../_components/ReportDateFilter";
 import { parseCsv, toCsv } from "../_hooks/reportAxisFilters";
 import type { ParametreBeyani, ParametreSecenegi } from "./sunum";
 import { ALL_LABEL, ParamPickerDialog } from "./ParamPickerDialog";
-import { COMPARE_PARAM, VIEW_PARAM } from "./request-params";
+import { COMPARE_PARAM, PARAM_RESETS, SCOPE_PARAM, VIEW_PARAM } from "./request-params";
 import { emptyLabelOf, VARIANT_PARAM } from "./variant-model";
 
 interface ChipSpec {
@@ -53,7 +53,7 @@ export function chipSpecsOf(params: readonly ParametreBeyani[], search: URLSearc
       label: p.etiket,
       options: p.secenekler ?? [],
       multiple: p.tur === "cokluSecim",
-      allowAll: p.ad !== COMPARE_PARAM && p.ad !== VIEW_PARAM,
+      allowAll: p.ad !== COMPARE_PARAM && p.ad !== VIEW_PARAM && p.ad !== SCOPE_PARAM,
       selected: appliedOf(p, search),
       emptyLabel: emptyLabelOf(p.ad),
     }));
@@ -90,6 +90,17 @@ export function splitChips<T extends { key: string; selected: string[] }>(chips:
   return { inline: chips.filter((c) => keep.has(c.key)), folded: chips.filter((c) => !keep.has(c.key)) };
 }
 
+/** Çip seçiminin yeni URL'i: "Tümü" anahtarı düşürür; değer gerçekten değiştiyse bağımlı seçimler (`PARAM_RESETS`) de düşer. */
+export function nextSearchOf(search: URLSearchParams, key: string, values: string[], applied: readonly string[]): URLSearchParams {
+  const next = new URLSearchParams(search);
+  const v = toCsv(values);
+  if (v === null) next.delete(key);
+  else next.set(key, v);
+  // Karşılaştırma sunucunun UYGULADIĞI değerle: URL'de yokken aynı değeri seçmek kırılımı düşürmez.
+  if (toCsv(applied) !== v) for (const dep of PARAM_RESETS[key] ?? []) next.delete(dep);
+  return next;
+}
+
 interface Props {
   entry: ReportCatalogEntry;
   params: readonly ParametreBeyani[];
@@ -109,13 +120,7 @@ export function ParamChips({ entry, params, personNamed = false }: Props) {
   const chips = chipSpecsOf(params, search);
   const { inline, folded } = splitChips(chips, inlineLimitFor(bandWidth));
   const foldedActive = folded.filter((c) => c.selected.length > 0).length;
-  const apply = (key: string, values: string[]) => {
-    const next = new URLSearchParams(search);
-    const v = toCsv(values);
-    if (v === null) next.delete(key);
-    else next.set(key, v);
-    setSearch(next, { replace: true });
-  };
+  const apply = (c: ChipSpec, values: string[]) => setSearch(nextSearchOf(search, c.key, values, c.selected), { replace: true });
   const chipButton = (c: ChipSpec, wide = false) => (
     <Button
       key={c.key}
@@ -168,7 +173,7 @@ export function ParamChips({ entry, params, personNamed = false }: Props) {
           allowAll={open.allowAll}
           allLabel={open.emptyLabel}
           selected={open.selected}
-          onApply={(values) => apply(open.key, values)}
+          onApply={(values) => apply(open, values)}
           onClose={() => setOpenKey(null)}
         />
       ) : null}

@@ -78,6 +78,15 @@ export function itemTypeDefaultFilter(sp: URLSearchParams): Record<string, strin
   return { itemType: stock.join(",") };
 }
 
+/** Ayrım öncesi yer imi `filter[itemType]=SERVICE` boş liste gösterirdi (items SERVICE taşımaz) → Hizmet Kartları
+ *  ekranına yönlendir, arama terimi taşınır. `null` = yönlendirme yok. */
+export function legacyServiceListTarget(sp: URLSearchParams): string | null {
+  const types = sp.get(itemUrlFilterParam("itemType"))?.split(",") ?? [];
+  if (!types.includes("SERVICE")) return null;
+  const search = sp.get("search");
+  return search ? `/definitions/services?search=${encodeURIComponent(search)}` : "/definitions/services";
+}
+
 /** Liste ekranının sunucu süzgeci: durum + (Tür seçilmemişse) stok türleri. */
 export const itemListFilters = (status: ItemStatusFilter, sp: URLSearchParams): Record<string, string> => ({
   ...itemStatusFilters(status),
