@@ -23,7 +23,18 @@ const HOUR_MS = 3_600_000;
 
 export type WeavingTimeSource = "KOSUM" | "NORM";
 export type WeavingActualMissing =
-  | "FASON" | "KOSUM_YOK" | "MAKINE_TARIFESI" | "MAKINE_NORMU" | "KOSUM_METRESI" | "TOP_YOK" | "STANDART_YOK";
+  | "FASON" | "KOSUM_YOK" | "MAKINE_TARIFESI" | "MAKINE_NORMU" | "KOSUM_METRESI" | "TOP_YOK" | "STANDART_YOK"
+  /** SY-N4 BİLGİ (eksik değil): varyantın sürümü yok, standart desen genelinden — rakam varyantın değil, sessiz kalmasın. */
+  | "VARYANT_STANDART_YOK";
+
+/** Satırı "eksik" yapmayan bilgi kodları — rapor notu olarak düşer. */
+export const WEAVING_INFO_CODES: readonly WeavingActualMissing[] = ["VARYANT_STANDART_YOK"];
+
+/** Standart sürüm boşluğu: hiç yok → eksik; varyantlı iş desen geneline düştü → bilgi. */
+function standardGaps(found: boolean, hasRecipe: boolean, variantHit: boolean): WeavingActualMissing[] {
+  if (!found) return ["STANDART_YOK"];
+  return hasRecipe && !variantHit ? ["VARYANT_STANDART_YOK"] : [];
+}
 
 /** Standart maliyetin DOKUMA satırları (tezgah saati yöntemi üç satır, atkı ücreti yöntemi tek satır). */
 export const WEAVING_STANDARD_COMPONENTS = ["LOOM_MACHINE", "LOOM_LABOR", "ENERGY", "WEAVING_PICK"] as const;
@@ -156,7 +167,7 @@ export async function weavingActualCostTx(
     const totalMeters = m.viaRun.plus(m.viaOrder);
     const v = versionOf(o);
     const standardPerMTry = v ? v.lines.reduce((a, l) => a.plus(l.amountPerMTry), D0()) : null;
-    if (!v) missing.push("STANDART_YOK");
+    missing.push(...standardGaps(!!v, !!o.recipeId, variantOf.has(`${o.itemId}|${o.recipeId}`)));
 
     const { hours, cost, runSec, stopSec, closedRuns } = runTotals(o.machineRuns, { rates, timeSource, now, missing });
     const fason = o.executionKind === "SUBCONTRACTED";

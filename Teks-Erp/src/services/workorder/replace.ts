@@ -262,11 +262,11 @@ export async function replace(
     }
 
     // Değişmeyen hedef mevcut işi yürütür (E); yeni hedef create ile aynı kural.
-    const replaceItemUsage: ItemUsage =
-      resolvedTargetItemId === (existing.targetItemId ?? null) || allocations.length > 0
-        ? "EXISTING_GOODS"
-        : "NEW_PLAN";
-    if (resolvedTargetItemId) await assertItemUsable(prisma, resolvedTargetItemId, replaceItemUsage);
+    const targetUnchanged = resolvedTargetItemId === (existing.targetItemId ?? null);
+    const replaceItemUsage: ItemUsage = targetUnchanged || allocations.length > 0 ? "EXISTING_GOODS" : "NEW_PLAN";
+    // Tür kapısı yalnız hedef DEĞİŞİNCE: kapıdan önce açılmış eski kayıt düzenlenebilir kalır.
+    const replaceUsageOpts = { workOrderTarget: !targetUnchanged };
+    if (resolvedTargetItemId) await assertItemUsable(prisma, resolvedTargetItemId, replaceItemUsage, replaceUsageOpts);
 
     let resolvedTargetColorId: string | null = data.targetColorId ?? null;
     if (type === "ORDER_PRODUCTION" && allocations.length > 0) {
@@ -426,7 +426,7 @@ export async function replace(
     // ── Transaction: smart merge (steps id-bazlı diff) ───────────────────────
     const updated = await prisma.$transaction(async (tx) => {
       // İLK ifade: 8030 SHARED → kart FOR SHARE (WO satır claim'inden önce, kilit sırası).
-      if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, replaceItemUsage);
+      if (resolvedTargetItemId) await assertItemUsableTx(tx, resolvedTargetItemId, replaceItemUsage, replaceUsageOpts);
       // ATOMİK CLAIM: tx başında (yıkıcı drop-and-recreate'ten ÖNCE) WO satırını
       // write-kilitle + COMPLETED/CANCELLED'e geçmediğini iddia et. tx-DIŞI
       // ön-kontrol (2978-2985) UX; eşzamanlı son-top finalize bu satırı tx süresince

@@ -210,7 +210,7 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
         onOpenChange(o);
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Cari Kartı Düzenle</DialogTitle>
           <DialogDescription>
