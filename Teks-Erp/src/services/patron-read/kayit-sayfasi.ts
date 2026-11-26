@@ -82,7 +82,7 @@ function sortCursorWhere(s: SortPlan, c: { key: Date | string | number | null; i
 }
 
 /** Bulut `LIST_ID_FILTER_KEYS` ile aynı sıra; bir küme yalnız o adda KOLONU varsa kabul eder. */
-export const ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId", "teklifId", "urunId"] as const;
+export const ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId", "teklifId", "urunId", "hizmetId"] as const;
 export type IdFilterKey = (typeof ID_FILTER_KEYS)[number];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

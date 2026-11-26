@@ -65,14 +65,10 @@ function searchFilters(name: string, q: ListQuery): Prisma.Sql[] {
 }
 
 /** Literal ifade: `projection_rows_cari_idx` (`data->>'cariKartId'`) parametreli anahtarla eşleşmez. */
-const ID_FIELD_SQL: Readonly<Record<ListIdFilterKey, Prisma.Sql>> = {
-  cariKartId: Prisma.sql`r.data->>'cariKartId'`,
-  cariHesapId: Prisma.sql`r.data->>'cariHesapId'`,
-  siparisId: Prisma.sql`r.data->>'siparisId'`,
-  teklifId: Prisma.sql`r.data->>'teklifId'`,
-  urunId: Prisma.sql`r.data->>'urunId'`,
-  hizmetId: Prisma.sql`r.data->>'hizmetId'`,
-};
+// Alan adları yalnız tel beyanından (`LIST_ID_FILTER_KEYS`, derleme anı sabiti) türer: bulut alan adı yazmaz, beyanı uygular.
+const ID_FIELD_SQL = Object.fromEntries(
+  LIST_ID_FILTER_KEYS.map((k) => [k, Prisma.raw(`r.data->>'${k}'`)]),
+) as Readonly<Record<ListIdFilterKey, Prisma.Sql>>;
 
 /** Kimlik süzgeçleri: anahtar projeksiyonun beyanında değilse ya da değer UUID değilse 400 (fail-closed). */
 function idFilters(name: string, q: ListQuery): Prisma.Sql[] {
