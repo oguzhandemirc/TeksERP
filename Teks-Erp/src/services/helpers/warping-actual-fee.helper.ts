@@ -108,7 +108,9 @@ export async function loadRollWarpingCostsTx(db: Db, rollIds: string[], ctx: War
     let line: Dec | null = D0();
     const consumedM = new Prisma.Decimal(c.lengthM ?? 0);
     const b = c.beam;
-    if (b.ownerCustomerId || b.originKind === WarpBeamOrigin.PURCHASED || b.originKind === WarpBeamOrigin.CONSIGNED) {
+    // Köken `originKind`ten: `ownerCustomerId` mülkiyet eksenidir, devere kabulü onu müşteri ipliği lotundan kalıtır —
+    // o leventin devere faturası yine bize kesilir, "emanet levent" sayılmaz.
+    if (b.originKind === WarpBeamOrigin.PURCHASED || b.originKind === WarpBeamOrigin.CONSIGNED) {
       line = null;
       acc.missing.push("LEVENT_KOKENI");
     } else if (b.originKind === WarpBeamOrigin.SUBCONTRACT) {
