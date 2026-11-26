@@ -71,7 +71,21 @@ export function listParams(f: CostItemFilter, cursor: string | null, limit: numb
   };
 }
 
+/** Dokuma iş emri gerçekleşen maliyeti (`GET /api/cost/weaving-orders/:id/actual`) — sayılar ve metinler sunucudan. */
+export interface WeavingActualRow {
+  anahtar: "TEZGAH" | "DEVERE" | "COZGU_IPLIGI";
+  ad: string;
+  standartTlM: string | null;
+  gercekTlM: string | null;
+  kaynak: string | null;
+  tahmini: boolean;
+  eksik: string[];
+}
+export interface WeavingActualCost { isEmriId: string; isEmriNo: string; devamEdiyor: boolean; topMetre: string; satirlar: WeavingActualRow[]; notlar: string[] }
+
 export const costItemService = {
+  weavingOrderActual: async (weavingOrderId: string) =>
+    (await apiClient.get<ApiResponse<WeavingActualCost>>(`/api/cost/weaving-orders/${weavingOrderId}/actual`)).data.data,
   list: async (f: CostItemFilter, cursor: string | null, limit = 50) =>
     (await apiClient.get<ApiResponse<CostItemRow[]> & CostItemPage>("/api/cost/items", { params: listParams(f, cursor, limit) })).data as CostItemPage,
   detail: async (itemId: string) => (await apiClient.get<ApiResponse<CostItemDetail>>(`/api/cost/items/${itemId}`)).data.data,
