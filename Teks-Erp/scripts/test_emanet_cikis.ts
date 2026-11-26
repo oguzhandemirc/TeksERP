@@ -280,11 +280,18 @@ async function main(): Promise<void> {
       !!tbl && tbl.tables.length === 1 && tbl.tables[0]!.rows.length === d1.items.length && tbl.header.some(([k, v]) => k === "Belge No" && v === d1.dispatchNo));
     check("§11f iptal edilmiş belge yeniden basılamaz → 409", durum(await beklenenHata(() => printedDocumentService.reissue(DOC, d1.id, `${TAG} deneme`, admin.id))) === 409);
     // Lazy-init: belgesiz eski kayıt ilk açılışta doğar; iptal edilmiş eski kayıt VOIDED doğar.
-    await prisma.printedDocument.deleteMany({ where: { docType: DOC, sourceId: { in: [d1.id, again.data.id] } } });
-    await printedDocumentService.getCurrent(DOC, again.data.id);
-    await printedDocumentService.getCurrent(DOC, d1.id);
-    const lazyLive = await docsOf(again.data.id);
-    const lazyVoid = await docsOf(d1.id);
+    // Eski kayıt doğrudan yazılır: donmuş belgeyi silerek kurmak defter silmedir (test_defter_ters_yol §10b2).
+    // Ayrı sahip: A/B'nin §8 liste ve özet sayımlarına karışmasın.
+    const custOld = await prisma.customer.create({ data: { code: `${TAG}-E`, name: `${TAG} Müşteri Eski` }, select: { id: true } });
+    ids.custs.push(custOld.id);
+    const oldLive = await prisma.consignmentDispatch.create({ data: { dispatchNo: `${TAG}-ESKI-1`, ownerCustomerId: custOld.id }, select: { id: true } });
+    const oldVoid = await prisma.consignmentDispatch.create({
+      data: { dispatchNo: `${TAG}-ESKI-2`, ownerCustomerId: custOld.id, cancelledAt: new Date(), cancelledById: admin.id, cancelReason: `${TAG} eski iptal` }, select: { id: true },
+    });
+    await printedDocumentService.getCurrent(DOC, oldLive.id);
+    await printedDocumentService.getCurrent(DOC, oldVoid.id);
+    const lazyLive = await docsOf(oldLive.id);
+    const lazyVoid = await docsOf(oldVoid.id);
     check("§11g eski kayıt lazy-init: canlı çıkış ACTIVE, iptal edilmiş çıkış VOIDED doğar",
       lazyLive.length === 1 && lazyLive[0]!.status === "ACTIVE" && lazyVoid.length === 1 && lazyVoid[0]!.status === "VOIDED");
     const perm = DOC_PERMISSIONS.CONSIGNMENT_DISPATCH;

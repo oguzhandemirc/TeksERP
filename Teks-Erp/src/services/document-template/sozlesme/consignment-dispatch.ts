@@ -33,7 +33,7 @@ import {
   printRoot,
   rootFields,
 } from "./ortak";
-import { longText, sampleDoc, sampleEnvelope } from "./senaryolar";
+import { longText, sampleDoc, sampleEnvelope, sampleSeriesCode } from "./senaryolar";
 import { baseConfigSchema, normalizeBase, plainJson, resolveColumns, sanitizeRawConfig, type BaseDocConfig } from "./subcontractor-common";
 import type { BuildExtras, ContextObject, ContextValue, DocumentContract, FieldDef, Scenario, TableDef, TemplateContext } from "./tipler";
 
@@ -69,7 +69,7 @@ const SUMMARY_TABLE: TableDef = {
 };
 
 const ROOT_FIELDS: FieldDef[] = [
-  { yol: "belge.no", etiket: "Belge no (emanet çıkış no)", tur: "metin", sinif: "musteri", ornek: "EC2606070003" },
+  { yol: "belge.no", etiket: "Belge no (emanet çıkış no)", tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("consignmentDispatch", 3) },
   { yol: "belge.tur", etiket: "Belge türü", tur: "metin", sinif: "musteri", ornek: "CONSIGNMENT_DISPATCH" },
   { yol: "belge.baslik", etiket: "Belge başlığı", tur: "metin", sinif: "musteri", ornek: CONSIGNMENT_DISPATCH_TITLE },
   { yol: "belge.tarih", etiket: "Çıkış anı", tur: "tarih_saat", sinif: "musteri", ornek: "2026-06-07T09:30:00.000Z" },
