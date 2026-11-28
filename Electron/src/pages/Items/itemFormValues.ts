@@ -25,6 +25,7 @@ export function toFormValues(initial: Item): ItemFormValues {
     warpSpecId: initial.warpSpecId ?? "",
     weftSpecId: initial.weftSpecId ?? "",
     weaveDesignId: initial.weaveDesignId ?? "",
+    drawingInPlanId: initial.drawingInPlanId ?? "",
     allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
     allowedPropertyIds: initial.allowedProperties?.map((p) => p.propertyId) ?? [],
     ...fabricClassFormValues(initial),

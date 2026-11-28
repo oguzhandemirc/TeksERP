@@ -36,3 +36,14 @@ export function constructionPayload(
   else if (initial?.weaveDesignId) out.weaveDesignId = null;
   return out;
 }
+
+/** T1 tahar planı bağı — `constructionPayload` ile aynı kural (doluysa id, kayıtta vardı + boş → null, görünmezse yok). */
+export function drawingInPlanPayload(
+  value: string,
+  initialId: string | null | undefined,
+  visible: boolean,
+): { drawingInPlanId?: string | null } {
+  if (!visible) return {};
+  if (value) return { drawingInPlanId: value };
+  return initialId ? { drawingInPlanId: null } : {};
+}

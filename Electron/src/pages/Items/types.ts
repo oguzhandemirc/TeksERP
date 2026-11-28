@@ -81,6 +81,8 @@ export interface Item extends ItemCardExtra {
   /** SY-A4: atkı kartı + desen kartı (yalnız KUMAŞ; eski sunucuda yok). */
   weftSpecId?: string | null;
   weaveDesignId?: string | null;
+  /** T1: tahar planı (yalnız KUMAŞ; eski sunucuda yok). */
+  drawingInPlanId?: string | null;
   /** D3: liste "Desen" sütunu (kod + mekanizma · örgü); eski sunucuda yok → "—". */
   weaveDesign?: { id: string; code: string; name: string; kind?: string | null; shedMechanism?: string | null; weaveStructure?: string | null } | null;
   /** K4P ürün kartı eni (cm); Decimal metin gelir. Eski sunucuda yok. */
@@ -125,6 +127,7 @@ export interface ItemCreatePayload extends ItemCardExtraPayload {
   /** SY-A4: atkı/desen kartı — anahtar yalnız seçici görünür ve alan dolu/temizlenmişse gider. */
   weftSpecId?: string | null;
   weaveDesignId?: string | null;
+  drawingInPlanId?: string | null;
   /** K4P en (cm) — yalnız Kalite Güvence açıkken ve KUMAŞta gider; boş = `null` (temizler). */
   widthCm?: string | null;
   /** Dokuma ayrıntıları — yalnız KUMAŞ; anahtar dolu ya da kayıtlı değer temizleniyorsa gider. */

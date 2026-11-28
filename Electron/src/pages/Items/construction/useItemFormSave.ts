@@ -9,7 +9,7 @@ import { buildWeftBody } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import type { Item, ItemCreatePayload } from "../types";
 import type { ItemFormValues } from "../schema";
 import { buildItemPayload, fabricDetailPayload, yarnUnitPayload, yarnWastePayload } from "../itemPayload.helper";
-import { constructionPayload } from "../ItemConstructionPickers";
+import { constructionPayload, drawingInPlanPayload } from "../ItemConstructionPickers";
 import { fabricClassPayload, fiberBody, fibersChanged, fibersCreatePayload } from "../fabricClass.payload";
 import { cardExtraPayload } from "../cardExtra.payload";
 import { itemService } from "../service";
@@ -51,6 +51,7 @@ export function useItemFormSave({ open, form, initial, weft, visible, onSubmit, 
     const base = {
       ...buildItemPayload(v, isEdit, visible.kaliteGuvence),
       ...constructionPayload({ weftSpecId: "", weaveDesignId: v.weaveDesignId }, { weftSpecId: null, weaveDesignId: initial?.weaveDesignId }, visible.construction),
+      ...drawingInPlanPayload(v.drawingInPlanId, initial?.drawingInPlanId, visible.construction),
       ...fabricDetailPayload(v, initial),
       ...yarnWastePayload(v, initial, visible.yarnWaste),
       ...yarnUnitPayload(v, initial),
