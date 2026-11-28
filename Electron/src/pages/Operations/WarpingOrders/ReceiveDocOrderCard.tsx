@@ -13,12 +13,15 @@ import { draftsFromPlan, emptyBeamDraft, isBlankDraft, type ReceiveBeamDraft } f
 import { ReceiveBeamsTable, type ReceiveTableOptions } from "./ReceiveParts";
 import { reworkCandidates } from "./rejection-model";
 import { useWarpingRejections } from "./rejection-service";
+import { useReceiveBodyOptions } from "./receive-body-options";
 import { WARPING_ORDERS_QUERY_KEY, warpingOrderService } from "./service";
 import { WARPING_STATUS_META, type WarpingOrderRow } from "./types";
 
 function CardTable({ orderId, drafts, onChange, options }: { orderId: string; drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void; options: ReceiveTableOptions }) {
   const rj = useWarpingRejections(orderId);
-  return <ReceiveBeamsTable drafts={drafts} onChange={onChange} reworks={reworkCandidates(rj.data?.data ?? [])} options={{ ...options, minRows: 0 }} />;
+  // D3: gövde seçicisi sipariş başı (bu siparişle gidenler önce); takip kapalıyken istek atılmaz.
+  const bc = useReceiveBodyOptions(orderId, (options.bodyMode ?? "OFF") !== "OFF");
+  return <ReceiveBeamsTable drafts={drafts} onChange={onChange} reworks={reworkCandidates(rj.data?.data ?? [])} options={{ ...options, minRows: 0, bodyChoices: bc.data }} />;
 }
 
 export function ReceiveDocOrderCard({ order, drafts, onChange, options }: { order: WarpingOrderRow; drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void; options: ReceiveTableOptions }) {

@@ -10,6 +10,7 @@ import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft, type ReceiveBodyDraft, type ReceiveWeighing } from "./receive-model";
 import { ReceiveBodyCell } from "./ReceiveBodyCell";
+import { availableOptions, type ReceiveBodyOptions } from "./receive-body-options";
 import type { ReworkCandidate } from "./rejection-model";
 import type { WarpingReceivePreview } from "./receive-types";
 import { YarnLabel } from "./YarnLabel";
@@ -33,10 +34,11 @@ function ReworkSelect({ i, value, reworks, onChange }: { i: number; value: strin
 }
 
 /** Ayarların tabloya etkisi: tartı OFF → brüt/dara sütunu yok; gövde modu OFF → gövde no METNİ (bugünkü), açıkken okutma hücresi. */
-export interface ReceiveTableOptions { weighing?: ReceiveWeighing; bodyMode?: "OFF" | "OPTIONAL" | "REQUIRED"; subcontractorId?: string | null; minRows?: number }
+export interface ReceiveTableOptions { weighing?: ReceiveWeighing; bodyMode?: "OFF" | "OPTIONAL" | "REQUIRED"; subcontractorId?: string | null; minRows?: number; bodyChoices?: ReceiveBodyOptions }
 
 export function ReceiveBeamsTable({ drafts, onChange, reworks = [], options = {} }: { drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void; reworks?: ReworkCandidate[]; options?: ReceiveTableOptions }) {
-  const { weighing = "OPTIONAL", bodyMode = "OFF", subcontractorId = null, minRows = 1 } = options;
+  const { weighing = "OPTIONAL", bodyMode = "OFF", subcontractorId = null, minRows = 1, bodyChoices } = options;
+  const takenBy = (i: number) => new Set(drafts.flatMap((d, j) => (j !== i && d.body?.kind === "existing" ? [d.body.id] : [])));
   const weigh = weighing !== "OFF";
   const bodies = bodyMode !== "OFF";
   const set = (i: number, k: Field, v: string) => onChange(drafts.map((d, j) => (j === i ? { ...d, [k]: v } : d)));
@@ -53,7 +55,7 @@ export function ReceiveBeamsTable({ drafts, onChange, reworks = [], options = {}
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               {bodies
-                ? <TableHead className="min-w-56" title="Gövdenin QR'ını okutun ya da no yazıp Enter'a basın; tanımsız gövde yerinde tanımlanır">Gövde{bodyMode === "REQUIRED" ? " *" : ""}</TableHead>
+                ? <TableHead className="min-w-56" title="Gövdenin QR'ını okutun, no yazıp Enter'a basın ya da deverecideki gövdelerimizden seçin; tanımsız gövde yerinde tanımlanır">Gövde{bodyMode === "REQUIRED" ? " *" : ""}</TableHead>
                 : <TableHead className="min-w-28" title="Leventin üzerindeki numara (isteğe bağlı)">Gövde no</TableHead>}
               <TableHead className="w-32 text-right">Metre</TableHead>
               {weigh && <TableHead className="w-28 text-right" title={weighing === "REQUIRED" ? "Tartı zorunlu — tüketimi değiştirmez" : "İsteğe bağlı tartı — tüketimi değiştirmez"}>Brüt kg{weighing === "REQUIRED" ? " *" : ""}</TableHead>}
@@ -68,7 +70,7 @@ export function ReceiveBeamsTable({ drafts, onChange, reworks = [], options = {}
                 <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                 <TableCell>
                   {bodies
-                    ? <ReceiveBodyCell row={i + 1} value={drafts[i]?.body} subcontractorId={subcontractorId} onChange={(v) => setBody(i, v)} />
+                    ? <ReceiveBodyCell row={i + 1} value={drafts[i]?.body} subcontractorId={subcontractorId} onChange={(v) => setBody(i, v)} choices={bodyChoices} available={availableOptions(bodyChoices, takenBy(i))} />
                     : cell(i, "physicalBeamNo", "gövde no", false)}
                 </TableCell>
                 <TableCell>{cell(i, "lengthM", "metre")}</TableCell>
