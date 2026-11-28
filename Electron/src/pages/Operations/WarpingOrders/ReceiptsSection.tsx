@@ -167,7 +167,7 @@ export function ReceiptsSection({ order }: { order: WarpingOrder }) {
         )}
       </div>
       {q.isError && <p role="alert" className="text-sm text-destructive">{apiErrorMessage(q.error)}</p>}
-      {q.data && <SettlementSummary s={q.data.settlement} />}
+      {q.data && <SettlementSummary s={q.data.settlement} overrun={{ fee: order.fee, totalEnds: order.totals.endsCount }} />}
       {q.isSuccess && rows.length === 0 && <p className="text-sm text-muted-foreground">Henüz levent dönmedi.{receivable ? " Devereci leventleri getirince “Levent kabulü” ile girin." : ""}</p>}
       {rows.length > 0 && <ReceiptTable rows={rows} canUndo={order.status !== "CANCELLED"} onUndo={(r) => setOpen({ kind: "undo", r })} ctx={ctx} />}
       {open?.kind === "receive" && <ReceiveDocDialog fixedOrder={order} onClose={() => setOpen(null)} />}

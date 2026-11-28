@@ -94,6 +94,13 @@ describe("WarpingOrderPage — yazma yüzeyi", () => {
     expect(screen.getByText("Açık")).toBeTruthy();
   });
 
+  it("⑥ tek iplik + dizilim notu yok: özet 'A · 2.000 tel (tek iplik)'; gönderilen satırı her zaman var", async () => {
+    get.mockResolvedValue({ ...order("OPEN"), warpSpec: { ...order().warpSpec, sequenceNote: null } });
+    renderWithProviders(<WarpingOrderPage />);
+    expect((await screen.findByTestId("order-warp-report")).textContent).toMatch(/^A · 2\.?000 tel \(tek iplik\)$/);
+    expect(screen.getByTestId("order-sent-totals").textContent).toBe("Henüz sevk yok");
+  });
+
   it("② kapalı siparişte ve izinsiz kullanıcıda yazma düğmesi yok", async () => {
     get.mockResolvedValue(order("COMPLETED"));
     const { unmount } = renderWithProviders(<WarpingOrderPage />);

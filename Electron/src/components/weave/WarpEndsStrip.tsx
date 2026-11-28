@@ -66,12 +66,20 @@ export function WarpEndsStrip(props: WarpEndsStripProps) {
   const legend = yarns.map((y, i) => ({
     color: mark.color(i + 1), mark: mark.letter(i + 1), label: y.label, note: `${formatQty(y.endsCount, 0)} tel`,
   }));
+  // Tek iplikli kartta rapor kendiliğinden "bütün teller A"dır; "girilmemiş" demek raporun yok sanılmasına yol açtı (fabrika sunumu 11-28).
+  const single = !seq && !sequenceNote?.trim() && yarns.length === 1 && yarns[0]!.endsCount > 0;
   return (
     <figure className={cn("min-w-0 space-y-1.5", className)} data-testid="warp-ends-strip">
       {title && <figcaption className="text-xs font-medium text-muted-foreground">{title}</figcaption>}
       {seq ? <SequenceBand seq={seq} yarns={yarns} cardEnds={cardEnds} compact={compact} maxWidth={maxWidth} mark={mark} />
         : <ProportionalBand yarns={yarns} mark={mark} />}
-      {!compact && !seq && <p className="text-xs text-muted-foreground" data-testid="warp-ends-fallback">{fallbackHint ?? fallbackNote(pending, sequenceNote)}</p>}
+      {single && (
+        <p className="text-xs tabular-nums" data-testid="warp-ends-single">
+          <span className="font-medium">Çözgü raporu {mark.letter(1)} · {formatQty(yarns[0]!.endsCount, 0)} tel</span>
+          {!compact && <span className="text-muted-foreground"> — tek iplik, bütün teller aynı iplik</span>}
+        </p>
+      )}
+      {!compact && !seq && !single && <p className="text-xs text-muted-foreground" data-testid="warp-ends-fallback">{fallbackHint ?? fallbackNote(pending, sequenceNote)}</p>}
       {!compact && <YarnLegend entries={legend} />}
     </figure>
   );

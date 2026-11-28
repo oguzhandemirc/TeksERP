@@ -11,7 +11,9 @@
 //   Yarış: iki eşzamanlı sevk ikisi de geçer (claim sıraya sokar, belge no farklı) · iki eşzamanlı iptal → biri 409
 //   Başlık: devere sevki iş emri / dokuma yollarında 409 · DB `subcontractor_dispatches_header_ck` kolsuz başlığı reddeder
 //   Talimat: iç kolon (kg, fire, ücret) yok · iplik kapalı → servis 403 + dört uçta `requireIplikEnabled`
+//   D2   siparişle ilk sevk: aynı tx (plan dışı/lot zorunlu → sipariş doğmaz) · replay kimliğinde ilk sevk satırları · iptal sonrası 409
 // NEGATİF SONDA (koşuldu 2026-11-17): bkz. arşiv notu "Fason devere D4b-1" (CHECK 3. kol · strict · claim yüklemi).
+// (2026-11-28) D2 sondası bölüm dosyasının başlığında (`lib/devere-ilk-sevk-bolum.ts`).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
 import fs from "node:fs";
@@ -31,6 +33,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { assertWeavingBound, assertWorkOrderBound } from "../src/services/helpers/dispatch-header.helper";
 import { createWarpingOrder } from "../src/services/warping-order/create";
 import { dispatchWarpingOrder, getWarpingInstruction, previewWarpingDispatch, type WarpingDispatchLineInput } from "../src/services/warping-order/dispatch";
+import { ilkSevkBolumu } from "./lib/devere-ilk-sevk-bolum";
 import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../src/services/warping-order/dispatch-cancel";
 
 let pass = 0;
@@ -250,6 +253,9 @@ async function main(): Promise<void> {
       const outs = await prisma.yarnMovement.count({ where: { dispatchItem: { dispatchId: okA.dispatch.id }, kind: YarnMovementKind.SUBCONTRACT_OUT_CANCEL } });
       check("Yarış b: depo geri dönüşü tek kez yazıldı", outs === 1, String(outs));
     }
+
+    // ── D2 siparişle ilk sevk (tek istek, tek tx) — bölüm scripts/lib/devere-ilk-sevk-bolum.ts ──
+    await ilkSevkBolumu({ check, errOf, show, setSetting, tag: TAG, userId: U, subcontractorId: sub.id, specId: spec.id, warehouseId: whId, yarn: { X, Y, Z, W }, lot: { xL1, yL1 }, orderIds });
 
     // ── Talimat + modül kapısı ──────────────────────────────────────────
     const ins = await getWarpingInstruction(O1);

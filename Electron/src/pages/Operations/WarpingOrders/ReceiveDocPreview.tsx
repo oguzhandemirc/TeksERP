@@ -6,6 +6,8 @@ import { fmtM } from "./order-model";
 import { noteWarnings } from "./receive-doc-model";
 import { ReceivePreviewView } from "./ReceiveParts";
 import type { WarpingReceiveDocPreview } from "./receive-doc-types";
+import type { WarpingReceivePreview } from "./receive-types";
+import { useWarpingOrder } from "./service";
 
 export function ReceiveDocPreviewView({ p, blocked }: { p: WarpingReceiveDocPreview; blocked: boolean }) {
   const notes = noteWarnings(p);
@@ -25,12 +27,18 @@ export function ReceiveDocPreviewView({ p, blocked }: { p: WarpingReceiveDocPrev
           )}
         </Callout>
       )}
-      {p.orders.map((o) => (
-        <section key={o.warpingOrderId} className="space-y-2 rounded-xl border bg-card p-4" aria-label={`${o.preview.order.orderNo} önizlemesi`}>
-          <h3 className="text-sm font-semibold">{o.preview.order.orderNo}</h3>
-          <ReceivePreviewView p={o.preview} />
-        </section>
-      ))}
+      {p.orders.map((o) => <OrderPreview key={o.warpingOrderId} orderId={o.warpingOrderId} p={o.preview} />)}
     </div>
+  );
+}
+
+/** Ücret etkisi için siparişin donuk ücreti (detay önbellekte; kabul önizlemesi ücreti taşımaz — tablet de aynı ucu okur). */
+function OrderPreview({ orderId, p }: { orderId: string; p: WarpingReceivePreview }) {
+  const o = useWarpingOrder(orderId).data;
+  return (
+    <section className="space-y-2 rounded-xl border bg-card p-4" aria-label={`${p.order.orderNo} önizlemesi`}>
+      <h3 className="text-sm font-semibold">{p.order.orderNo}</h3>
+      <ReceivePreviewView p={p} overrun={o ? { fee: o.fee, totalEnds: o.totals.endsCount } : undefined} />
+    </section>
   );
 }

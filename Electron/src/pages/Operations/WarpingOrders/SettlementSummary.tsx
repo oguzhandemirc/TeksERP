@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { transferText } from "./holding-model";
 import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { signedKg } from "./receive-model";
+import { OverrunNote, type OverrunCtx } from "./OverrunNote";
 import type { WarpingSettlement } from "./receive-types";
 import { YarnLabel } from "./YarnLabel";
 
@@ -14,17 +15,21 @@ const num = "text-right tabular-nums";
 const kgOrDash = (v: string) => (Number(v) === 0 ? "—" : fmtKg(v));
 const pctText = (v: string | null) => (v === null ? "" : ` (${signedKg(v, (n) => formatQty(n, 2))} %)`);
 
-function MetreStrip({ m }: { m: WarpingSettlement["metre"] }) {
+function MetreStrip({ m, overrun }: { m: WarpingSettlement["metre"]; overrun?: OverrunCtx }) {
   const short = Number(m.diffM) < 0;
+  const over = Number(m.diffM) > 0;
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border p-3 text-sm sm:grid-cols-4" aria-label="Metre mutabakatı">
       <div><dt className="text-xs text-muted-foreground">Hedef</dt><dd className="font-medium tabular-nums">{fmtM(m.targetM)} m · {isBeamCountOpen({ beamCount: m.planBeamCount, beamCountOpen: m.planBeamCountOpen }) ? "adet belli değil" : `${m.planBeamCount} levent`}</dd></div>
       <div><dt className="text-xs text-muted-foreground">Gelen</dt><dd className="font-medium tabular-nums">{fmtM(m.receivedM)} m · {m.receivedBeamCount} levent{m.rejectedBeamCount ? <span className="block text-xs font-normal text-orange-700 dark:text-orange-400">reddedilen {fmtM(m.rejectedM ?? "0")} m · {m.rejectedBeamCount} levent (gelene sayılmaz)</span> : null}</dd></div>
       <div>
         <dt className="text-xs text-muted-foreground">Fark</dt>
-        <dd className={cn("font-medium tabular-nums", short && "text-amber-700 dark:text-amber-400")}>{signedKg(m.diffM, fmtM)} m{pctText(m.diffPct)}</dd>
+        <dd className={cn("font-medium tabular-nums", short && "text-amber-700 dark:text-amber-400", over && "text-sky-800 dark:text-sky-300")}>{signedKg(m.diffM, fmtM)} m{pctText(m.diffPct)}</dd>
       </div>
-      <div><dt className="text-xs text-muted-foreground">Durum</dt><dd>{Number(m.receivedM) === 0 ? "Henüz levent gelmedi" : short ? "Eksik geldi" : "Hedef tamam"}</dd></div>
+      <div>
+        <dt className="text-xs text-muted-foreground">Durum</dt>
+        <dd>{Number(m.receivedM) === 0 ? "Henüz levent gelmedi" : short ? "Eksik geldi" : over ? <OverrunNote diffM={m.diffM} ctx={overrun} className="block space-y-0.5" /> : "Hedef tamam"}</dd>
+      </div>
     </dl>
   );
 }
@@ -37,10 +42,10 @@ function WeighLine({ w }: { w: NonNullable<WarpingSettlement["weighing"]> }) {
   );
 }
 
-export function SettlementSummary({ s }: { s: WarpingSettlement }) {
+export function SettlementSummary({ s, overrun }: { s: WarpingSettlement; overrun?: OverrunCtx }) {
   return (
     <div className="space-y-2">
-      <MetreStrip m={s.metre} />
+      <MetreStrip m={s.metre} overrun={overrun} />
       <div className="overflow-x-auto rounded-md border bg-card">
         <Table aria-label="İplik mutabakatı">
           <TableHeader>

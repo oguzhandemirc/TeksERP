@@ -1,6 +1,7 @@
 // Sipariş formunun "İplik planı" kartı: kilitliyse kayıtlı plan, değilse sunucu önizlemesi (yazmaz).
 // Kayıtlı plan fire kaynağını saklamaz → sipariş sayfasıyla AYNI `useOrderWasteSource` (açık görünümle aynı etiket).
 import { apiErrorMessage } from "@/services/apiClient";
+import { WarpEndsStrip } from "@/components/weave/WarpEndsStrip";
 import { PlanTable } from "./PlanTable";
 import { fmtM, isBeamCountOpen } from "./order-model";
 import type { useWarpingPreview } from "./service";
@@ -42,6 +43,15 @@ export function PlanPreview({ order, planLocked, pq, hasBody, fresh }: Props) {
             {preview.stock.known ? "" : " · iplik stoğu bilinmiyor (iplik modülü kapalı)"}
           </p>
           <PlanTable yarns={preview.yarns} hasWaste={preview.hasWaste} totals={preview.totals} showStock={preview.stock.known} />
+          {/* Çözgü raporu yeni siparişte de görünür (tek iplikte "A · 6.000 tel"); açılım sunucudan, eski sunucuda oransal blok. */}
+          <WarpEndsStrip
+            title="Çözgü raporu"
+            yarns={preview.yarns.map((y) => ({ label: y.name || y.code, endsCount: y.endsCount }))}
+            endsSequence={preview.endsSequence ?? null}
+            sequenceNote={preview.warpSpec.sequenceNote ?? null}
+            fallbackHint={preview.endsSequence === undefined ? "Sunucu çözgü raporunu göndermedi (eski sürüm); sipariş açılınca talimatta görünür." : undefined}
+            maxWidth={420}
+          />
         </>
       )}
     </section>
