@@ -8,7 +8,8 @@ import { WeaveGrid } from "@/components/weave/WeaveGrid";
 import { WeaveScrollBox } from "@/components/weave/WeaveScrollBox";
 import { WeaveSegmented } from "@/components/weave/WeaveViewControls";
 import { YarnLegend } from "@/components/weave/YarnLegend";
-import { computeDrawdown, drawdownRepeatPicks, drawUnit, groundFrameIndexes, threadingMatrix } from "@/components/weave/weave-drawdown";
+import { computeDrawdown, drawdownRepeatPicks, groundFrameIndexes, threadingMatrix } from "@/components/weave/weave-drawdown";
+import { drawingInPlanNote, resolvePreviewDrawingIn, type PreviewDrawingInPlan } from "./fabric-preview-drawing-in";
 import { DRAWING_IN_LABEL, drawingInIsDrawn, type DrawingInType } from "@/components/weave/weave-drawing-in";
 import type { WeaveDirection } from "@/components/weave/weave-direction";
 import { WARP_COLOR, LIFT_COLOR, yarnColor, yarnLetter } from "@/components/weave/weave-palette";
@@ -19,7 +20,7 @@ const REPEATS = [1, 2, 4] as const;
 const ROW_LABEL_W = 30;
 
 const DRAWDOWN_INFO = "Kumaş görünümü desen örgüsünden ve atkı seçiciden çizilir: telin çerçevesi kalkıksa kare çözgü rengini, "
-  + "inikse o atkıda atılan ipliğin rengini alır. Tahar Yapı sekmesindeki tahar türüne göre çizilir: Düz 1, 2, 3…; Sivri 1, 2, 3, 2…; "
+  + "inikse o atkıda atılan ipliğin rengini alır. Seçili kumaşın ürün kartında tahar planı varsa o plandan çizilir; yoksa Yapı sekmesindeki tahar türüne göre çizilir: Düz 1, 2, 3…; Sivri 1, 2, 3, 2…; "
   + "Atlamalı önce tek sonra çift çerçeveler. Tür seçilmemişse ya da Özel ise düz tahar varsayılır (döner ve kenar çerçeveleri hariç). "
   + "Kalın çizgiler desen raporunun sınırıdır.";
 
@@ -34,6 +35,8 @@ interface Props {
   selector: number[] | null;
   yarnNames: readonly string[];
   direction: WeaveDirection;
+  /** Seçili kumaşın tahar planı (T1); varsa kumaş görünümü ondan çizilir (sunucu basımı ikizi). */
+  drawingInPlan?: PreviewDrawingInPlan | null;
 }
 
 const NONE: readonly number[] = [];
@@ -46,7 +49,7 @@ export function drawingInCaption(type: DrawingInType | null, note: string | null
   return type === "CUSTOM" ? `${head}.` : "Düz tahar varsayıldı (tahar planı girilmemiş).";
 }
 
-export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames = NONE, selector, yarnNames, direction }: Props) {
+export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames = NONE, selector, yarnNames, direction, drawingInPlan = null }: Props) {
   const [repeat, setRepeat] = useState<number>(2);
   // Döner bir ÖRGÜdür (mekanizma değil): Armür · Döner kartta da kumaş görünümü çizilmez.
   const lenoWeave = isLeno(design);
@@ -71,8 +74,10 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames 
   const ground = groundFrameIndexes(frames, lenoFrames, selvedgeFrames);
   if (plan.length === 0 || ground.length === 0) return null;
   const drawingInType = design.drawingInType ?? null;
-  const dd = computeDrawdown({ liftPlan: plan, lenoFrames, selvedgeFrames, pickSequence: selector, repeat, drawingInType });
-  const unitEnds = drawUnit(ground, drawingInType).length;
+  const src = resolvePreviewDrawingIn(drawingInPlan, frames, ground, drawingInType);
+  const planNote = drawingInPlanNote(drawingInPlan, src.planApplied);
+  const dd = computeDrawdown({ liftPlan: plan, lenoFrames, selvedgeFrames, pickSequence: selector, repeat, drawingInType, threading: src.threading });
+  const unitEnds = src.unitEnds;
   const basePicks = drawdownRepeatPicks(plan.length, selector?.length ?? 0);
   const threading = threadingMatrix(frames, dd.draw);
   const leno = new Set(lenoFrames);
@@ -101,7 +106,8 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames 
         </div>
       </WeaveScrollBox>
       <p className="max-w-xl text-xs text-muted-foreground">
-        {drawingInCaption(drawingInType, design.drawingInNote ?? null)}
+        {planNote && <span className="mr-1 font-medium text-foreground" data-testid="drawing-in-plan-note">{planNote}.</span>}
+        {src.planApplied ? `Tahar planından çizildi${design.drawingInNote ? ` · tahar notu: ${design.drawingInNote}` : "."}` : drawingInCaption(drawingInType, design.drawingInNote ?? null)}
         {leno.size > 0 && " Döner çerçeveler kumaş görünümüne girmez."}
         {selvedgeFrames.length > 0 && ` Kenar çerçeveleri (${selvedgeFrames.join(", ")}) kumaşın iki kenarındadır; zemin raporuna girmez.`}
         {!selector && " Atkı seçici yok — tek atkı ipliğiyle çizildi."}
