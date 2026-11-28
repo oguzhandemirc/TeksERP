@@ -18,6 +18,7 @@ vi.mock("@/hooks/usePricingEnabled", () => ({
   useFeatureFlags: () => ({ data: { data: flags } }),
   useDevereEnabled: () => Boolean(flags.devereEnabled && flags.iplikEnabled),
   useEmanetEnabled: () => Boolean(flags.emanetEnabled),
+  useDevereBeamBodyMode: () => (flags.beamBodies ? "OPTIONAL" : "OFF"),
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.includes(p) }) }));
 vi.mock("@/components/layout/PageHeader", () => ({
@@ -156,6 +157,20 @@ describe("Fasondaki İplik ekranı", () => {
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
     await screen.findByText("LOT-77");
     expect(screen.queryByText("Müşteri Tekstil")).toBeNull();
+  });
+});
+
+describe("Fasondaki İplik — deverecideki gövdeler bağlantısı (D3)", () => {
+  it("yalnız gövde takibi açık + beam-body:read ile görünür", async () => {
+    const r = renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    await screen.findByText("LOT-77");
+    expect(screen.queryByRole("button", { name: /Deverecideki gövdeler/ })).toBeNull();
+    r.unmount();
+    flags.beamBodies = true;
+    perms = [...perms, "beam-body:read"];
+    renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    await screen.findByText("LOT-77");
+    expect(screen.getByRole("button", { name: /Deverecideki gövdeler/ })).toBeInTheDocument();
   });
 });
 
