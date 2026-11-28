@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
 import { suggestWarpEnds } from "@/pages/Operations/WarpPlan/service";
 import { fmtKg, parseInput, yarnLetter } from "@/pages/Operations/WarpPlan/warp-plan-model";
 import { formatQty } from "@/lib/format";
@@ -56,6 +57,7 @@ const ROW_GRID = "grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_auto_2.25rem] items-
 /** İplik satırları: harf (A/B/C — talimattaki ad) · iplik (doğrudan modal; ad + küçük kod/denye) · tel · kg yardımcısı · sil. */
 export function YarnRowsEditor() {
   const { control, register, formState } = useFormContext<WarpSpecFormValues>();
+  const yarnForm = useItemRecordForm(["YARN"]); // seçicide Yeni · Örnek al: kartı bırakmadan iplik aç
   const { fields, append, remove } = useFieldArray({ control, name: "yarns" });
   const { yarns, per1000, specWastePct } = useWarpCalc();
   // B6: iplik kartında kendi firesi olan iplikte çözgü firesi uygulanmaz — sunucunun satır kaynağından söylenir.
@@ -70,8 +72,8 @@ export function YarnRowsEditor() {
     <div className="space-y-2" data-testid="warp-yarn-rows">
       <div className={`${ROW_GRID} px-1 text-xs font-medium text-muted-foreground`}>
         <span />
-        <span>İplik</span>
-        <span className="inline-flex items-center gap-1">Tel sayısı <InfoPopover label="Tel sayısı" desc="Kenar telleri dahil yazın; çözgü kg'ı bu sayılardan hesaplanır." /></span>
+        <span className="inline-flex items-center gap-1">İplik <InfoPopover label="Çözgü ipliği nerede kullanılır" desc="Denye ve iplik firesi bu iplik kartından alınır. Kg dışı birimle (adet, metre) alınan iplik çözgüye giremez." /></span>
+        <span className="inline-flex items-center gap-1">Tel sayısı <InfoPopover label="Tel sayısı" desc="Çözgüde yan yana kaç iplik olduğu; kenar telleri dahil yazın. Devereci levente bu kadar tel sarar, dokumada her tel bir gücü gözünden geçer. Çözgü kg/m = tel × denye ÷ 9.000.000 ÷ (1 − çekme), sonra fire eklenir; devere planının kg'ı ve tel/cm özeti de bundan." /></span>
         <span />
         <span />
       </div>
@@ -93,6 +95,7 @@ export function YarnRowsEditor() {
                     onChange={(id) => field.onChange(id ?? "")}
                     service={itemService}
                     queryKey="items-warp-yarn"
+                    recordForm={yarnForm}
                     filters={{ itemType: "YARN", lifecycleStatus: "ACTIVE" }}
                     getLabel={(it) => it.name}
                     getSubLabel={(it) => it.code}

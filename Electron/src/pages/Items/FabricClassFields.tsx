@@ -18,7 +18,7 @@ export function FabricClassFields({ form }: { form: UseFormReturn<ItemFormValues
   const recordForm = useClassTypeRecordForm("fabric");
   return (
     <>
-      <FormField label="Kumaş türü" error={form.formState.errors.fabricTypeId} info="Tül, Fon, Blackout gibi tür. Liste Tanımlar › Kumaş Türleri'nden yönetilir.">
+      <FormField label="Kumaş türü" error={form.formState.errors.fabricTypeId} info="Tül, Fon, Blackout gibi tür. Liste Tanımlar › Kumaş Türleri'nden yönetilir. Yalnız ürün listesinde süzgeç ve sütun olarak kullanılır; hiçbir hesaba girmez.">
         <Controller
           control={form.control}
           name="fabricTypeId"
@@ -41,7 +41,7 @@ export function FabricClassFields({ form }: { form: UseFormReturn<ItemFormValues
           )}
         />
       </FormField>
-      <FormField label="Yanmazlık" error={form.formState.errors.flameRetardancy} info="Kumaşın yanmazlık sınıfı. Boş bırakılırsa belirtilmemiş sayılır.">
+      <FormField label="Yanmazlık" error={form.formState.errors.flameRetardancy} info="Kumaşın yanmazlık sınıfı; boşsa belirtilmemiş sayılır. Yalnız bilgi: hiçbir hesap ya da ekran bu değeri kullanmıyor.">
         <Controller
           control={form.control}
           name="flameRetardancy"

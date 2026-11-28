@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useWarpSpecEnabled } from "@/hooks/usePricingEnabled";
 import { NATIVE_SELECT_CLASS } from "../WeaveDesignCreateDialog";
@@ -14,6 +15,8 @@ import { constructionApi } from "../service";
 import { BEAM_MODE_OPTIONS, WARP_LAYER_ROLE_LABEL, type WarpBeamMode } from "../types";
 import { ConstructionWarnings } from "./ConstructionWarnings";
 import { WarpLayersVisual } from "./WarpLayersVisual";
+
+const LAYERS_INFO = "Her katmanın kg'ı kendi çekmesiyle maliyete eklenir. Ayrı levent seçilirse o kartın firesi geçer ve ayrı levent ihtiyacı doğar; zeminle aynı leventte en hızlı çeken katmanın çekmesi alınır.";
 
 interface Props {
   fabric: { id: string; code: string };
@@ -50,7 +53,10 @@ export function WarpLayersSection({ fabric, canWrite, place, onOpenItem }: Props
   return (
     <section className="space-y-3" aria-label="Ek çözgü katmanları">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">{place === "item" ? "Ek çözgü katmanları" : `Çözgü — ${fabric.code}`}</h3>
+        <h3 className="flex items-center gap-1 text-sm font-semibold">
+          {place === "item" ? "Ek çözgü katmanları" : `Çözgü — ${fabric.code}`}
+          <InfoPopover label="Ek çözgü katmanları nerede kullanılır" desc={LAYERS_INFO} />
+        </h3>
         {!editable && onOpenItem && (
           <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={onOpenItem}>
             <ExternalLink className="mr-1.5 h-4 w-4" />Üründe aç

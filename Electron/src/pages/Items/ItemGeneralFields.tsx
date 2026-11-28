@@ -106,7 +106,7 @@ export function ItemGeneralFields(p: Props) {
 
       {p.carriesLists && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="Renkler (kartela)" info="Bu kumaş için seçilebilir renkler. Boş bırakılırsa bütün aktif renkler serbest. (Eski adı: İzinli Renkler)">
+          <FormField label="Renkler (kartela)" info="Bu kumaş için seçilebilir renkler; boşsa bütün aktif renkler serbest. Doluysa mal kabulde, ilk stok girişinde, stok düzeltmede ve üretim hedef renginde listede olmayan renk engellenir; panel ve tablet siparişinde renk seçici bu listeye süzülür. (Eski adı: İzinli Renkler)">
             <PickerTrigger
               icon={<Palette className="h-4 w-4 text-muted-foreground" />}
               count={allowedColorIds.length}
@@ -116,7 +116,7 @@ export function ItemGeneralFields(p: Props) {
               onClick={p.onOpenColors}
             />
           </FormField>
-          <FormField label="Uygulanabilir özellikler" info="Bu kumaşa uygulanabilecek özellikler. Boş bırakılırsa bütün aktif özellikler serbest. (Eski adı: İzinli Özellikler)">
+          <FormField label="Uygulanabilir özellikler" info="Bu kumaşa uygulanabilecek özellikler; boşsa bütün aktif özellikler serbest. Mal kabul ön kontrolünde ve sipariş satırının özellik seçicisinde bu liste kullanılır. (Eski adı: İzinli Özellikler)">
             <PickerTrigger
               icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
               count={allowedPropertyIds.length}
