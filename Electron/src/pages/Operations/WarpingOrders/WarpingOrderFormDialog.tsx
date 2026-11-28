@@ -64,21 +64,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   // İlk sevk yalnız yeni siparişte ve iplik stoğu izleniyorken (iplik kapalıysa sevk zaten 403).
   const initialYarns = mode === "create" && fresh && preview?.stock.known ? preview.yarns : null;
   const initialKg = initialYarns ? initialTotalKg(initial, initialYarns.map((y) => y.yarnItemId)) : 0;
-  const attempt = useAttemptToken();
-  const qc = useQueryClient();
-  const save = useMutation({
-    mutationFn: (body: ReturnType<typeof buildOrderBody> & { ok: true }) =>
-      order
-        ? warpingOrderService.update(order.id, body.body)
-        : warpingOrderService.create(body.body, attempt.token()),
-    onSuccess: (res) => {
-      attempt.onSuccess();
-      toastServerSuccess(res, order ? "Sipariş güncellendi." : "Sipariş açıldı.");
-      void qc.invalidateQueries({ queryKey: [WARPING_ORDERS_QUERY_KEY] });
-      onSaved(res.data.id);
-    },
-    onError: (e) => attempt.onFailure(e),
-  });
+  const save = useSaveOrder(order, onSaved);
   if (mode === null) return null;
   const submit = () => {
     const r = buildOrderBody(s, mode);
@@ -94,23 +80,8 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
       sectionsKey="warping-order.form"
       onOpenChange={(o) => !o && onClose()}
       title={order ? `${order.orderNo} — düzenle` : "Yeni fason devere siparişi"}
-      description={
-        !order
-          ? "Çözgü kartı ve levent adedi × boy (adet belli değilse toplam metre) girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır."
-          : planLocked
-            ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
-            : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır."
-      }
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Vazgeç
-          </Button>
-          <Button onClick={submit} disabled={save.isPending} className="min-w-32">
-            {save.isPending ? "Kaydediliyor…" : order ? "Kaydet" : initialKg > 0 ? `Siparişi aç + sevk et (${fmtKg(initialKg)} kg)` : "Siparişi aç"}
-          </Button>
-        </>
-      }
+      description={dialogDescription(Boolean(order), planLocked)}
+      footer={<DialogFooter onClose={onClose} onSubmit={submit} pending={save.isPending} isEdit={Boolean(order)} initialKg={initialKg} />}
     >
       <WideFormColumns
         sideWidth="wide"
@@ -150,6 +121,46 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         }
       />
     </WideFormDialog>
+  );
+}
+
+type SaveInput = ReturnType<typeof buildOrderBody> & { ok: true };
+
+function useSaveOrder(order: WarpingOrder | undefined, onSaved: (id: string) => void) {
+  const attempt = useAttemptToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SaveInput) =>
+      order ? warpingOrderService.update(order.id, body.body) : warpingOrderService.create(body.body, attempt.token()),
+    onSuccess: (res) => {
+      attempt.onSuccess();
+      toastServerSuccess(res, order ? "Sipariş güncellendi." : "Sipariş açıldı.");
+      void qc.invalidateQueries({ queryKey: [WARPING_ORDERS_QUERY_KEY] });
+      onSaved(res.data.id);
+    },
+    onError: (e) => attempt.onFailure(e),
+  });
+}
+
+function dialogDescription(isEdit: boolean, planLocked: boolean): string {
+  if (!isEdit)
+    return "Çözgü kartı ve levent adedi × boy (adet belli değilse toplam metre) girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır.";
+  return planLocked
+    ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
+    : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır.";
+}
+
+function DialogFooter(p: { onClose: () => void; onSubmit: () => void; pending: boolean; isEdit: boolean; initialKg: number }) {
+  const label = p.isEdit ? "Kaydet" : p.initialKg > 0 ? `Siparişi aç + sevk et (${fmtKg(p.initialKg)} kg)` : "Siparişi aç";
+  return (
+    <>
+      <Button variant="outline" onClick={p.onClose}>
+        Vazgeç
+      </Button>
+      <Button onClick={p.onSubmit} disabled={p.pending} className="min-w-32">
+        {p.pending ? "Kaydediliyor…" : label}
+      </Button>
+    </>
   );
 }
 

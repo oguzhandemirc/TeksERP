@@ -73,7 +73,7 @@ beforeEach(() => {
   svc.receipts.mockResolvedValue({ receipts: [receipt()], settlement });
 });
 
-describe("ReceiptsSection", () => {
+describe("ReceiptsSection — fazla devere", () => {
   it("④ hedef üstü metre: 'Fazla devere +120 m' + ücret etkisi, eksik etiketi yok", async () => {
     svc.receipts.mockResolvedValue({ receipts: [receipt()], settlement: { ...settlement, metre: { ...settlement.metre, receivedM: "1120.000", diffM: "120.000", diffPct: "12.00" } } });
     renderWithProviders(<ReceiptsSection order={order()} />);
@@ -81,7 +81,9 @@ describe("ReceiptsSection", () => {
     expect(m.getByTestId("warping-overrun").textContent).toBe("Fazla devere +120 mücret etkisi +120 m × 0,05 = +6,00 USD");
     expect(m.queryByText("Eksik geldi")).toBeNull();
   });
+});
 
+describe("ReceiptsSection", () => {
   it("① mutabakat + kabul satırı; kabul düğmesi durum ve izinle", async () => {
     const { unmount } = renderWithProviders(<ReceiptsSection order={order()} />);
     expect(await screen.findByText(/İrsaliye DV-118/)).toBeTruthy();
