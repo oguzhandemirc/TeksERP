@@ -43,4 +43,7 @@ export const ds = StyleSheet.create({
   summary: { fontSize: 18, fontWeight: '800', color: colors.text },
   rowBottom: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
   orderBtn: { borderRadius: 12 },
+  shrink: { flexShrink: 1 },
+  diffBadge: { borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 2, backgroundColor: palette.orange[100] },
+  diffBadgeText: { color: palette.orange[800], fontWeight: '800', fontSize: 13 },
 });

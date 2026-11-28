@@ -54,6 +54,23 @@ export interface ResolvedBeamBody {
   currentWarpBeam: { id: string; beamNo: string; status: string } | null;
 }
 
+/** D3 gövde seçicisi `GET /warping-orders/:id/receive-body-options` (panel `receive-body-options.ts` ile aynı tel). */
+export interface ReceiveBodyOption {
+  id: string;
+  bodyNo: string;
+  owner: { kind: 'OURS' | 'WARPER' | 'CUSTOMER' | 'OTHER'; label: string; customer: { id: string; code: string; name: string } | null };
+  sentWith: { dispatchId: string; dispatchNo: string; warpingOrderId: string | null; orderNo: string | null; at: string } | null;
+  statusSince: string;
+  statusAgeDays: number;
+  sentWithOrder: boolean;
+}
+
+export interface ReceiveBodyOptions {
+  subcontractorId: string;
+  sent: { id: string; bodyNo: string; status: string; statusLabel: string; atThisWarper: boolean; dispatchNo: string }[];
+  options: ReceiveBodyOption[];
+}
+
 export interface ReceiveBeamLine {
   lengthM: number;
   physicalBeamNo?: string | null;
@@ -140,6 +157,9 @@ export const devereKabulService = {
       throw e;
     }
   },
+  /** D3 "Listeden seç": deverecide duran boş gövdelerimiz (bu siparişle gidenler önce). Eski sunucu 404 → seçici gizli. */
+  receiveBodyOptions: async (orderId: string): Promise<ReceiveBodyOptions> =>
+    (await apiClient.get<ApiResponse<ReceiveBodyOptions>>(`/warping-orders/${orderId}/receive-body-options`)).data.data,
   /** Ret okutması: levent etiketi / gövde QR / gövde no → sarım + sipariş (`mobile:devere-ret`). */
   rejectLookup: async (code: string): Promise<RejectLookup> =>
     (await apiClient.get<ApiResponse<RejectLookup>>('/warping-beam-rejections/lookup', { params: { code } })).data.data,

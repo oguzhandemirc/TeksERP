@@ -10,10 +10,12 @@ import { devereKabulService, type WarpingTabletContext, type WarpingTabletOrder 
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 import { autoPickOrderId, autoPickSubcontractorId, buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import { useBodyScan, useReceiveSubmit } from './useReceiveSubmit';
+import { availableOptions, bodyFromOption, takenBodyIds } from './bodyOptions';
 import { labelsAutoQueued, normalizeAutoPrint } from './useBeamCardPrint';
 import { useBeamReject } from './useBeamReject';
 
 export const DEVERE_KABUL_CTX_KEY = ['devere-kabul', 'context'] as const;
+const DEVERE_KABUL_BODY_OPTIONS_KEY = ['devere-kabul', 'body-options'] as const;
 /** Açık satır sayfası: hangi siparişe, hangi taslak; `editing` doluysa mevcut satır düzeltiliyor. */
 export interface LineSheet { orderId: string; draft: BeamDraft; editing: boolean }
 
@@ -54,6 +56,27 @@ function useOrderDrafts(ctxOrders: WarpingTabletOrder[]) {
   return { orders, activeOrder, activeOrderId, setActiveOrderId, addOrder, removeOrder, clear, sheet, setSheet, openNewLine, editLine, saveLine, removeLine };
 }
 
+/**
+ * D3 gövde seçicisi (aktif sipariş): "Listeden seç" seçenekleri + "farklı gövde" kıyas kümesi. Seçim opsiyoneldir;
+ * eski sunucu (uç yok) ya da hata → seçenek yok, düğme gizli; okutma yolu aynen çalışır.
+ */
+function useBodyChoices(orderId: string | null, enabled: boolean, orders: OrderDraft[], openNewLine: (b: BeamDraft['body']) => void) {
+  const q = useQuery({
+    queryKey: [...DEVERE_KABUL_BODY_OPTIONS_KEY, orderId ?? ''],
+    queryFn: () => devereKabulService.receiveBodyOptions(orderId as string),
+    enabled: enabled && !!orderId,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const bodyChoices = enabled && orderId ? q.data : undefined;
+  const bodyOptions = useMemo(() => availableOptions(bodyChoices, takenBodyIds(orders)), [bodyChoices, orders]);
+  const pickBody = useCallback((id: string) => {
+    const o = bodyOptions.find((x) => x.id === id);
+    if (o) openNewLine(bodyFromOption(o));
+  }, [bodyOptions, openNewLine]);
+  return { bodyChoices, bodyOptions, bodyOptionsLoading: q.isFetching, pickBody };
+}
+
 export function useDevereKabul() {
   const qc = useQueryClient();
   const isOnline = useIsOnline();
@@ -66,7 +89,10 @@ export function useDevereKabul() {
   const drafts = useOrderDrafts(ctxOrders);
   const subcontractor = context.data?.subcontractors.find((s) => s.id === subcontractorId) ?? null;
   const build = useMemo(() => buildDocBody(drafts.orders, { subcontractorId, deliveryNoteNo, weighing: settings.receiveWeighing }), [drafts.orders, subcontractorId, deliveryNoteNo, settings.receiveWeighing]);
-  const refresh = useCallback(() => void qc.invalidateQueries({ queryKey: DEVERE_KABUL_CTX_KEY }), [qc]);
+  const refresh = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: DEVERE_KABUL_CTX_KEY });
+    void qc.invalidateQueries({ queryKey: DEVERE_KABUL_BODY_OPTIONS_KEY }); // kabulle bağlanan gövde listeden düşsün
+  }, [qc]);
   const { clear, addOrder: addDraft } = drafts;
   // Tek açık sipariş kendiliğinden seçilir — devereci başına bir kez (kaldırılırsa geri gelmez); kabulden sonra yeniden.
   const autoDone = useRef<string | null>(null);
@@ -106,8 +132,9 @@ export function useDevereKabul() {
     const used = new Set(drafts.orders.find((o) => o.orderId === sh.orderId)?.beams.filter((b) => b.key !== sh.draft.key).map((b) => b.reworkOfBeamId) ?? []);
     return (ctxOrders.find((o) => o.id === sh.orderId)?.reworkCandidates ?? []).filter((c) => !used.has(c.beamId));
   }, [drafts.orders, ctxOrders]);
+  const bodies = useBodyChoices(drafts.activeOrderId, settings.beamBodyMode !== 'OFF' && isOnline, drafts.orders, drafts.openNewLine);
   return {
-    reworkFor, context, isOnline, offlineReason, refresh, settings, subcontractors: context.data?.subcontractors ?? [], subcontractor, subcontractorId, selectSubcontractor,
+    reworkFor, ...bodies, context, isOnline, offlineReason, refresh, settings, subcontractors: context.data?.subcontractors ?? [], subcontractor, subcontractorId, selectSubcontractor,
     ctxOrders, ...drafts, addOrder, deliveryNoteNo, setDeliveryNoteNo, build, ...scan, ...submit, reject,
   };
 }

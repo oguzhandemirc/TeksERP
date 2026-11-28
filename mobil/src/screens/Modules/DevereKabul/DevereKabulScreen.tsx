@@ -2,7 +2,8 @@
 // DEVERE DÖNÜŞ KABULÜ (devere ek M1) — devereciden dönen dolu leventleri depoda kabul et
 // =============================================================================
 // Akış: devereci → irsaliye no → açık sipariş(ler) (tek açık sipariş kendiliğinden seçilir) → her levent için gövde
-// QR (tek huni `BarcodeScannerModal`, altta "Numara yaz"; tanımsız gövde yerinde tanımlanır) + metre + tartı →
+// QR (tek huni `BarcodeScannerModal`, altta "Numara yaz"; tanımsız gövde yerinde tanımlanır) ya da D3 "Listeden seç"
+// (deverecideki gövdelerimiz; gönderilenden başkası "farklı gövde" rozeti alır, seçim zorunlu değil) + metre + tartı →
 // önizleme → KABUL ET (panelle aynı belge ucu, hep-ya-hiç). OTURUMSUZ, online-only (kuyruk YOK).
 // Yerleşim tablet tasarım dili (Tambur): üst şerit (Yenile) · SOL şu anki iş · SAĞ leventler + sonuç · alt bant eylemler.
 // =============================================================================
@@ -23,7 +24,8 @@ import type { ReceiveDocResult, RejectLookup } from '../../../services/devereKab
 import WarpBeamLabelPrinter from '../Devere/WarpBeamLabelPrinter';
 import { useDevereKabul, type DevereKabulState } from './useDevereKabul';
 import { normalizeAutoPrint, useBeamCardPrint } from './useBeamCardPrint';
-import { AddBeamCard, HeaderPickers, JobCard, LinesCard } from './DevereKabulParts';
+import { AddBeamCard, HeaderPickers, JobCard, LinesCard, type PickerKind } from './DevereKabulParts';
+import { isDifferentBody, sentBodiesText } from './bodyOptions';
 import { ManualCodeFooter, ResultCard } from './DevereKabulResult';
 import BeamLineSheet from './BeamLineSheet';
 import { PreviewSheet } from './ReceiveSheets';
@@ -65,7 +67,7 @@ export default function DevereKabulScreen() {
   const compact = useDeviceType() === 'phone';
   useLandscapeLock(!compact);
   const s = useDevereKabul();
-  const [picker, setPicker] = useState<null | 'sub' | 'order'>(null);
+  const [picker, setPicker] = useState<PickerKind>(null);
   const [camera, setCamera] = useState(false);
   const [code, setCode] = useState('');
   const [rejectScan, setRejectScan] = useState(false);
@@ -84,7 +86,7 @@ export default function DevereKabulScreen() {
         <View style={[styles.body, compact && styles.stack]}>
           <View style={[styles.left, compact && styles.full]}>
             <JobCard state={s} onPickSub={() => setPicker('sub')} onPickOrder={() => setPicker('order')} />
-            <AddBeamCard state={s} code={code} setCode={setCode} canAdd={canAdd} onCamera={() => setCamera(true)} />
+            <AddBeamCard state={s} code={code} setCode={setCode} canAdd={canAdd} onCamera={() => setCamera(true)} onPickBody={() => setPicker('body')} />
             {s.context.isError ? <Text style={styles.danger}>Siparişler yüklenemedi — devere modülü kapalı, yetki yok ya da ağ. Yenileyin.</Text> : null}
           </View>
           <View style={styles.right}>
@@ -104,7 +106,7 @@ export default function DevereKabulScreen() {
         footer={<ManualCodeFooter placeholder="Gövde no (ör. LG-00012)" onSubmit={(c) => { setCamera(false); void s.scanBody(c); }} testID="devere-kabul-numara" />}
       />
       <HeaderPickers state={s} picker={picker} onClose={() => setPicker(null)} />
-      {s.sheet ? <BeamLineSheet value={s.sheet} weighing={s.settings.receiveWeighing} subcontractorName={s.subcontractor?.name ?? 'devereci'} reworkCandidates={s.reworkFor(s.sheet)} onSave={s.saveLine} onRemove={s.removeLine} onDismiss={() => s.setSheet(null)} /> : null}
+      {s.sheet ? <BeamLineSheet value={s.sheet} weighing={s.settings.receiveWeighing} subcontractorName={s.subcontractor?.name ?? 'devereci'} reworkCandidates={s.reworkFor(s.sheet)} differentFrom={isDifferentBody(s.sheet.draft.body, s.bodyChoices) ? sentBodiesText(s.bodyChoices) : null} onSave={s.saveLine} onRemove={s.removeLine} onDismiss={() => s.setSheet(null)} /> : null}
       {s.preview ? <PreviewSheet preview={s.preview} sent={s.build.ok ? s.build.body : null} duplicateMode={s.settings.duplicateDeliveryNote} pending={s.accept.isPending} isOnline={s.isOnline} onAccept={() => s.accept.mutate()} onBack={() => s.setPreview(null)} /> : null}
       <BarcodeScannerModal
         visible={rejectScan}
