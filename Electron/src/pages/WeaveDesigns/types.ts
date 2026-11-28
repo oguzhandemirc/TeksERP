@@ -105,7 +105,11 @@ export interface EffectiveConstruction {
 }
 
 /** Desene bağlı kumaş (ürün listesi satırının okunan alt kümesi). */
-export interface DesignFabric { id: string; code: string; name: string; weftSpecId: string | null; weaveDesignId: string | null }
+export interface DesignFabric {
+  id: string; code: string; name: string; weftSpecId: string | null; weaveDesignId: string | null;
+  /** T1: kumaşın tahar planı (liste satırı skaleri); eski backend göndermez → plansız çizim. */
+  drawingInPlanId?: string | null;
+}
 
 /** Varyant = iş emri şablonu (`ProductRecipe`) satırının okunan alt kümesi. */
 export interface DesignVariant {
