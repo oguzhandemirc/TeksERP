@@ -62,7 +62,7 @@ function parseFrameCount(raw: unknown, maxFrames: number): number {
   const n = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw;
   if (typeof n !== "number" || !Number.isInteger(n) || n < 1) throw bad("Çerçeve sayısı 1 ve üstü tam sayı olmalı.", "DRAWING_IN_FRAME_COUNT_INVALID");
   if (n > maxFrames) {
-    throw bad(`Çerçeve sayısı en çok ${maxFrames} olabilir (Ayarlar → Dokuma → Tahar planında en çok çerçeve).`, "DRAWING_IN_FRAME_COUNT_OVER_MAX");
+    throw bad(`Çerçeve sayısı en çok ${maxFrames} olabilir; üst sınır dokuma ayarlarındaki "Tahar planında en çok çerçeve" satırından değişir.`, "DRAWING_IN_FRAME_COUNT_OVER_MAX");
   }
   return n;
 }
