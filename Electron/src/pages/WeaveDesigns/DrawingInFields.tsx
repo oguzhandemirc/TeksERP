@@ -10,8 +10,8 @@ import type { ShedMechanism } from "./weave-class";
 const NONE = "NONE";
 const TYPE_LABELS = { [NONE]: "Belirtilmedi", ...Object.fromEntries(DRAWING_IN_TYPES.map((t) => [t, DRAWING_IN_LABEL[t]])) } as Record<DrawingInType | typeof NONE, string>;
 
-const TYPE_INFO = "Çözgü tellerinin çerçevelere geçiş sırası. Kumaş görünümü Düz, Sivri ve Atlamalı taharı çizer; Özel ya da boş tür düz tahar varsayar. Desen kartı basımında \"Tahar\" satırı olarak çıkar.";
-const NOTE_INFO = "Tellerin hangi çerçeveden ve tarağın hangi dişinden geçtiği (tahar ve tarak taharı). Desen kartı basımında türün yanında çıkar; hesaba girmez. Boş bırakılabilir.";
+const TYPE_INFO = "Çözgü tellerinin çerçevelere geçiş sırası. Kumaş görünümü Düz, Sivri ve Atlamalı taharı çizer; Özel ya da boş tür düz tahar varsayar. Tahar birimi ve armür görüntüsü bu türe göre hesaplanır; desen kartı basımında \"Tahar\" satırı olarak çıkar. Maliyete girmez.";
+const NOTE_INFO = "Tellerin hangi çerçeveden ve tarağın hangi dişinden geçtiği (tahar ve tarak taharı). Levent kartı ve desen kartı basımında türün yanında çıkar; hesaba girmez. Boş bırakılabilir.";
 
 export const drawingInApplies = (m: ShedMechanism): boolean => m === "CAM" || m === "DOBBY";
 

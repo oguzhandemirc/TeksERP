@@ -47,7 +47,7 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Mekanizma (Eksantrik · Armür · Jakar), örgü, desen örgüsü ya da jakar desen dosyası">
+        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Mekanizma (Eksantrik · Armür · Jakar), örgü, desen örgüsü ya da jakar desen dosyası. Teknik özetteki rapor/m ve tablet armür planı buradan gelir; aynı desen bir tezgâhta dönüyorsa tezgâh önerisi o tezgâhı öne alır. Maliyete girmez.">
           <Controller
             control={form.control}
             name="weaveDesignId"
