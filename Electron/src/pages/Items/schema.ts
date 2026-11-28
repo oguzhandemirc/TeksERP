@@ -106,6 +106,8 @@ export const makeItemFormSchema = (isEdit: boolean) =>
     /** SY-A4: atkı + desen kartı — yalnız KUMAŞ + dokuma açıkken çizilir, boş = kartsız. */
     weftSpecId: z.string(),
     weaveDesignId: z.string(),
+    /** T1: tahar planı — yalnız KUMAŞ + dokuma açıkken Çözgü sekmesinde çizilir, boş = plansız (türden çizim). */
+    drawingInPlanId: z.string(),
     allowedColorIds: z.array(z.string()),
     allowedPropertyIds: z.array(z.string()),
     ...fabricClassFields,
@@ -130,6 +132,7 @@ export const itemFormDefaults: ItemFormValues = {
   warpSpecId: "",
   weftSpecId: "",
   weaveDesignId: "",
+  drawingInPlanId: "",
   allowedColorIds: [],
   allowedPropertyIds: [],
   ...fabricClassDefaults,

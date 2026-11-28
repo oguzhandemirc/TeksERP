@@ -24,6 +24,7 @@ import { useItemWeftDraft } from "./construction/useItemWeftDraft";
 import { useItemFormSave } from "./construction/useItemFormSave";
 import { CopyFromFabricButton } from "./construction/CopyFromFabricButton";
 import { ItemWarpSection } from "./construction/ItemWarpSection";
+import { ItemDrawingInSection } from "./construction/ItemDrawingInSection";
 import { ItemWeftSection } from "./construction/ItemWeftSection";
 import { ItemWeaveSection } from "./construction/ItemWeaveSection";
 import { ItemVariantsSection, useVariantsTabVisible } from "./variants/ItemVariantsSection";
@@ -94,7 +95,14 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
   });
 
   const extraTabs: ItemExtraTab[] = [];
-  if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} layersVisible={constructionVisible} /> });
+  // Tahar planı çözgü kartının ALTINDA; uçları dokuma kapısında → yalnız yapı seçicileri görünürken.
+  const warpContent = (
+    <div className="space-y-4">
+      <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} layersVisible={constructionVisible} />
+      {constructionVisible && <ItemDrawingInSection form={form} savedPlanId={initial?.drawingInPlanId ?? null} />}
+    </div>
+  );
+  if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: warpContent });
   if (constructionVisible) extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} itemId={initial?.id ?? null} rawWidthText={form.watch("rawWidthCm")} /> },
     { value: "weave", label: "Desen", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
   const variantsVisible = useVariantsTabVisible(itemType, isEdit, constructionVisible);

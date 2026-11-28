@@ -45,6 +45,7 @@ import { DEVERE_BEAM_CARD_AUTO_PRINTS, type DevereBeamCardAutoPrint } from "./de
 import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { DEVERE_REED_NUMBER_UNITS, MECHANISM_SETTING, readEnabledShedMechanisms, type DevereReedNumberUnit } from "./weave-settings";
+import { DRAWING_IN_FRAMES_HARD_MAX } from "../../constants/drawing-in-plan";
 import { SHED_MECHANISM_LABEL, WEAVE_SHED_MECHANISMS, type WeaveShedMechanismValue } from "../../constants/weave-classification";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
 import { DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
@@ -930,6 +931,13 @@ export async function setFeatureFlags(
         throw AppError.badRequest("Tarak numarası birimi diş/10 cm ya da diş/cm (DENTS_PER_10CM/DENTS_PER_CM) olmalı");
       }
       await this.set(SETTING_KEYS.DEVERE_REED_NUMBER_UNIT, v, "Çözgü kartı: tarak numarası birimi (gösterim/giriş; saklama hep diş/10 cm)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaDrawingInMaxFrames")) {
+      const v = input.dokumaDrawingInMaxFrames;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > DRAWING_IN_FRAMES_HARD_MAX) {
+        throw AppError.badRequest(`Tahar planında en çok çerçeve 1 ile ${DRAWING_IN_FRAMES_HARD_MAX} arasında tam sayı olmalı`);
+      }
+      await this.set(SETTING_KEYS.DOKUMA_DRAWING_IN_MAX_FRAMES, v, "Tahar planı: en çok çerçeve sayısı (yeni/düzenlenen planda)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
       if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {

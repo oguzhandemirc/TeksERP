@@ -179,6 +179,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   dokumaMechanismDobbyEnabled: A(true),
   dokumaMechanismJacquardEnabled: A(true),
   devereReedNumberUnit: A("DENTS_PER_CM"), // K9: çeviri yolunu devreye sokan değer (gösterim ÷10); saklama değişmez
+  dokumaDrawingInMaxFrames: A(16), // T1: en geniş tahar planı (DB CHECK tavanı) — kapı en az daraltır
   dokumaWeavingWastePct: A(5), // fireyi devreye sokan değer: öneri/iplik ihtiyacı ham metresi büyür
   dokumaRollBirth: A("KK1_LABEL_OR_ORDER"), // KK1_LABEL_ONLY A yolunu kapatır; en çok işleten değer iki yolu da açar
   tezgahEscalationGraceMinutes: A(5),

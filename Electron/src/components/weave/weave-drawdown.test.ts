@@ -33,6 +33,22 @@ const DRAWDOWN_CASES: Array<{ name: string; input: Parameters<typeof computeDraw
     input: { liftPlan: [[1, 0], [0, 1]], repeat: 2 },
     cells: [[0, 1, 0, 1], [1, 0, 1, 0], [0, 1, 0, 1], [1, 0, 1, 0]],
   },
+  // Sunucu `test_weave_drawdown` §6a–§6c ile aynı örnekler (T1 tahar planı).
+  {
+    name: "tahar planı türün önüne geçer: 1-1-2-3-4",
+    input: { liftPlan: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], drawingInType: "SKIP", threading: [1, 1, 2, 3, 4] },
+    cells: [[0, 0, 1, 1, 1], [1, 1, 0, 1, 1], [1, 1, 1, 0, 1], [1, 1, 1, 1, 0]],
+  },
+  {
+    name: "tahar planı örgü genişliğini aşarsa türden türetilir",
+    input: { liftPlan: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], drawingInType: "SKIP", threading: [1, 5] },
+    cells: [[0, 1, 1, 1], [1, 1, 0, 1], [1, 0, 1, 1], [1, 1, 1, 0]],
+  },
+  {
+    name: "boş tahar planı = düz çizim",
+    input: { liftPlan: [[1, 0], [0, 1]], threading: [] },
+    cells: [[0, 1], [1, 0]],
+  },
 ];
 
 describe("kumaş görünümü (drawdown)", () => {

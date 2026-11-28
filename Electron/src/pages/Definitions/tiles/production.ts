@@ -195,6 +195,18 @@ export const productionTiles: DefinitionTile[] = [
     offHint: flagOffHint("dokumaEnabled"),
   },
   {
+    // TAHAR PLANLARI (T1) — dokuma modülü; desen kartıyla aynı izin (`warpspec:read`, yeni izin yok).
+    key: "drawing-in-plans",
+    title: "Tahar Planları",
+    description: "Çözgü tellerinin çerçeve dizisi (tahar raporu); ürün kartında Çözgü bölümünden seçilir",
+    icon: Rows3,
+    to: "/definitions/drawing-in-plans",
+    group: "production",
+    permission: "warpspec:read",
+    visibleWhen: (ctx) => ctx.dokumaEnabled,
+    offHint: flagOffHint("dokumaEnabled"),
+  },
+  {
     // ATKI KARTLARI (B19) — atkı kartı kendi ekranında da açılır/düzenlenir (ürün penceresi dışında); dokuma modülü.
     key: "weft-specs",
     title: "Atkı Kartları",

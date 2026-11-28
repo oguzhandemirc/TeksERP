@@ -1,7 +1,7 @@
 // =============================================================================
 // KUMAŞ GÖRÜNÜMÜ (drawdown) — armür planı + atkı seçiciden kare ızgara (kart görseli, 2026-11-22)
 // =============================================================================
-// Kural: tel i'nin çerçevesi = tahar dizilimi (`drawingInUnit`: düz/sivri/atlamalı; döner ve kenar çerçeveleri hariç); atkı j'de
+// Kural: tel i'nin çerçevesi = kumaşın tahar planı (T1; varsa) ya da tahar dizilimi (`drawingInUnit`: düz/sivri/atlamalı; döner ve kenar çerçeveleri hariç); atkı j'de
 // o çerçeve kalkıksa hücre çözgüdür (0), değilse atkı seçicisindeki iplik no'su (seçici yoksa 1).
 // Döner (LENO) desen çizilmez: doup hareketi ızgarayla simüle edilemez. Panel/tablet aynaları aynı
 // örneklerle parite testine bağlıdır. SAF; gösterim içindir, hesaba girmez.
@@ -27,6 +27,9 @@ export interface DrawdownInput {
   pickSequence: readonly number[] | null;
   /** Tahar türü (K1): Sivri/Atlamalı standart dizilimle çizilir; boş/Düz/Özel = düz tahar (bugünkü çizim). */
   drawingInType?: WeaveDrawingInTypeValue | null;
+  /** T1: kumaşın tahar planı (tel → 1-tabanlı çerçeve no). Doluysa türün yerine çizilir; desen örgüsünün
+   *  çerçeve genişliğini aşan numara varsa yok sayılır (türden türetme — geri uyumlu). */
+  threading?: readonly number[] | null;
   /** Çizilecek tel sayısı; varsayılan bir tahar raporu (`drawingInUnit` uzunluğu). */
   ends?: number;
   /** Çizilecek atkı sayısı; varsayılan armür planı satır sayısı. */
@@ -54,6 +57,12 @@ export function groundFrameNumbers(frames: number, lenoFrames: readonly number[]
   return out;
 }
 
+/** Kullanılabilir tahar planı dizisi (1-tabanlı); boşsa ya da örgü genişliğini aşıyorsa null → türden türet. */
+export function planThreading(threading: readonly number[] | null | undefined, frames: number): number[] | null {
+  if (!threading || threading.length === 0) return null;
+  return threading.every((f) => Number.isInteger(f) && f >= 1 && f <= frames) ? [...threading] : null;
+}
+
 /** Desenin kumaş görünümü; LENO, boş armür ya da zemin çerçevesi yoksa null. */
 export function computeDrawdown(input: DrawdownInput): WeaveDrawdown | null {
   if (input.kind === "LENO") return null;
@@ -62,7 +71,7 @@ export function computeDrawdown(input: DrawdownInput): WeaveDrawdown | null {
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
   const groundFrames = groundFrameNumbers(frames, input.lenoFrames, input.selvedgeFrames);
   if (groundFrames.length === 0) return null;
-  const unit = drawingInUnit(groundFrames.length, input.drawingInType).map((g) => groundFrames[g]!);
+  const unit = planThreading(input.threading, frames) ?? drawingInUnit(groundFrames.length, input.drawingInType).map((g) => groundFrames[g]!);
   const ends = clamp(input.ends ?? unit.length, DRAWDOWN_MAX_ENDS);
   const picks = clamp(input.picks ?? plan.length, DRAWDOWN_MAX_PICKS);
   const seq = input.pickSequence && input.pickSequence.length > 0 ? input.pickSequence : null;

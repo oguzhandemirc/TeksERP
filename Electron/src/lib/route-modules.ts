@@ -79,6 +79,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "definitions/beam-bodies": "devereEnabled",
   "operations/fasondaki-iplik": "devereEnabled",
   "definitions/weave-designs": "dokumaEnabled",
+  "definitions/drawing-in-plans": "dokumaEnabled",
   "definitions/weft-specs": "dokumaEnabled",
   "operations/weaving-orders": "dokumaEnabled",
   "operations/loom-load": "dokumaEnabled",

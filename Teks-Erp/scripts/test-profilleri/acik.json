@@ -114,6 +114,7 @@
     "dokumaMechanismDobbyEnabled": true,
     "dokumaMechanismJacquardEnabled": true,
     "devereReedNumberUnit": "DENTS_PER_CM",
+    "dokumaDrawingInMaxFrames": 16,
     "dokumaWeavingWastePct": 5,
     "dokumaRollBirth": "KK1_LABEL_OR_ORDER",
     "tezgahEscalationGraceMinutes": 5,

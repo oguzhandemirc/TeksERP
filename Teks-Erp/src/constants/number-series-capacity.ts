@@ -93,4 +93,5 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   warpingBeamRejection: 64, // warpingBeamRejection.docNo
   warpingReceiveDoc: 64, // warpingReceiveDoc.docNo
   customerDeliveryNote: 32, // customerDeliveryNote.noteNo
+  drawingInPlan: 32, // drawingInPlan.code
 };

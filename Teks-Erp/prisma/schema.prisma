@@ -799,6 +799,8 @@ model User {
   weftSpecsUpdated            WeftSpec[]                    @relation("WeftSpecUpdatedBy")
   weaveDesignsCreated         WeaveDesign[]                 @relation("WeaveDesignCreatedBy")
   weaveDesignsUpdated         WeaveDesign[]                 @relation("WeaveDesignUpdatedBy")
+  drawingInPlansCreated       DrawingInPlan[]               @relation("DrawingInPlanCreatedBy")
+  drawingInPlansUpdated       DrawingInPlan[]               @relation("DrawingInPlanUpdatedBy")
   weaveDesignImagesUploaded   WeaveDesignImage[]            @relation("WeaveDesignImageUploadedBy")
   costParameterSetsCreated    CostParameterSet[]            @relation("CostParameterSetCreatedBy")
   costParameterSetsUpdated    CostParameterSet[]            @relation("CostParameterSetUpdatedBy")
@@ -2575,6 +2577,46 @@ model WeaveDesignImage {
 
   @@index([uploadedById])
   @@map("weave_design_images")
+}
+
+/// TAHAR PLANI (T1, Seyitoğlu 2026-11-28) — her çözgü telinin hangi çerçeveden geçtiğini gösteren tekrar dizisi.
+/// KUMAŞA aittir (`Item.drawingInPlanId`), aynı plan çok kumaşta. Kod `drawingInPlan` serisinden (THR-0001).
+/// Dizi kısaltmalı yazımdan ("3x(1-2-3-4) 5-6") sunucuda açılır; ayrıştırıcı tek kaynak `constants/drawing-in-plan.ts`.
+/// Silinmez, pasife alınır; arşivlenmemiş kumaş bağlıyken pasif 409 (MV-06).
+model DrawingInPlan {
+  id             String   @id @default(uuid()) @db.Uuid
+  code           String   @unique @db.VarChar(32)
+  name           String   @db.VarChar(100)
+  /// Çerçeve sayısı — CHECK 1..16; servis üst sınırı `dokuma.drawingInMaxFrames` ayarı (varsayılan 12).
+  frameCount     Int      @db.SmallInt
+  /// Bir tahar raporu: tel sırasıyla 1-tabanlı çerçeve no (CHECK 1..16, uzunluk 1..512; her eleman ≤ frameCount).
+  threading      Int[]
+  /// Kullanıcının kısaltmalı yazımı (ya da diziden üretilen) — `threading` ile tutarlı (servis kapısı).
+  notation       String   @db.VarChar(500)
+  /// Normalleştirilmiş özet (en kısa tekrar biriminin sha256'sı) — eşleştirme anahtarı (T3).
+  threadingKey   String   @db.VarChar(64)
+  /// Kenar taharı (opsiyonel) — aynı kurallarla 1-tabanlı çerçeve no; boş = yok.
+  selvedgeThreading Int[] @default([])
+  notes          String?  @db.VarChar(500)
+  isActive       Boolean  @default(true)
+
+  fabricItems Item[] @relation("ItemDrawingInPlan")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR (`GENERATED ALWAYS AS (public.tr_fold("name")) STORED`).
+  nameFold  String?  @default(dbgenerated())
+
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("DrawingInPlanCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("DrawingInPlanUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([nameFold])
+  @@index([threadingKey])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("drawing_in_plans")
 }
 
 /// KUMAŞIN EK ÇÖZGÜ KATMANI (zemin = `Item.warpSpecId`; burada döner/ikinci çözgü) — ③b SAF
@@ -4547,6 +4589,8 @@ model Item {
   weftSpecId    String?  @db.Uuid
   /// SEYİTOĞLU MİG-1 — KUMAŞ → DESEN KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400).
   weaveDesignId String?  @db.Uuid
+  /// T1 (Seyitoğlu 2026-11-28) — KUMAŞ → TAHAR PLANI (N:1; aynı plan çok kumaşta). Yalnız `ItemType.FABRIC` (servis 400).
+  drawingInPlanId String? @db.Uuid
   /// Üretim tekniği (2026-11-25) — yalnız KUMAŞ; NULL = Dokuma (okuyucu varsayılanı). Örme bugün 400.
   fabricTechnique FabricTechnique?
   /// K8 (Seyitoğlu 2026-11-25) — KUMAŞ TÜRÜ (N:1, ayarlanabilir liste `fabric_types`). Yalnız `ItemType.FABRIC`
@@ -4596,6 +4640,8 @@ model Item {
   weftSpecYarnsAsYarn            WeftSpecYarn[]              @relation("WeftSpecYarnItem")
   /// Bu KUMAŞIN desen kartı (N:1) — SEYİTOĞLU MİG-1.
   weaveDesign                    WeaveDesign?                @relation("ItemWeaveDesign", fields: [weaveDesignId], references: [id], onDelete: Restrict)
+  /// Bu KUMAŞIN tahar planı (N:1) — T1.
+  drawingInPlan                  DrawingInPlan?              @relation("ItemDrawingInPlan", fields: [drawingInPlanId], references: [id], onDelete: Restrict)
   /// Bu KUMAŞIN ek çözgü katmanları (zemin `warpSpec`) — MİG-1.
   warpLayers                     ItemWarpLayer[]             @relation("ItemWarpLayerItem")
   /// Bu İPLİĞİ varyant atkı ikamesi olarak taşıyan satırlar (MİG-1).
@@ -4704,6 +4750,7 @@ model Item {
   @@index([warpSpecId])
   @@index([weftSpecId])
   @@index([weaveDesignId])
+  @@index([drawingInPlanId])
   @@index([fabricTypeId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")

@@ -156,6 +156,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/beam-bodies", app: "desktop", modul: "devereEnabled", title: "Levent Gövdeleri", requires: ["beam-body:read"], capabilities: ["beam-body:write", "beam-body:cancel"] },
   // DESEN KARTLARI (Seyitoğlu SY-A3) — armür/örgü kataloğu + atkı sırası + varyant; dokuma modülü.
   { key: "definitions/weave-designs", app: "desktop", modul: "dokumaEnabled", title: "Desen Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
+  { key: "definitions/drawing-in-plans", app: "desktop", modul: "dokumaEnabled", title: "Tahar Planları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
   // ATKI KARTLARI (B19) — atkı kartı listesi + oluştur/düzenle; izin desen/çözgü kartıyla aynı kod.
   { key: "definitions/weft-specs", app: "desktop", modul: "dokumaEnabled", title: "Atkı Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
   { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },

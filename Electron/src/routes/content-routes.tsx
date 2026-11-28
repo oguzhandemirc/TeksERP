@@ -32,6 +32,7 @@ import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
 import { BeamBodiesPage } from "@/pages/BeamBodies/BeamBodiesPage";
 import { BeamBodyPage } from "@/pages/BeamBodies/BeamBodyPage";
 import { WeaveDesignsPage } from "@/pages/WeaveDesigns/WeaveDesignsPage";
+import { DrawingInPlansPage } from "@/pages/DrawingInPlans/DrawingInPlansPage";
 import { WeaveDesignDetailPage } from "@/pages/WeaveDesigns/WeaveDesignDetailPage";
 import { WeftSpecsPage } from "@/pages/WeftSpecs/WeftSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
@@ -410,6 +411,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <WeaveDesignsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // TAHAR PLANLARI (T1) — karo ile aynı izin; modül kapısı ROUTE_MODULE'dan.
+    path: "definitions/drawing-in-plans",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <DrawingInPlansPage />
       </ProtectedRoute>
     ),
   },

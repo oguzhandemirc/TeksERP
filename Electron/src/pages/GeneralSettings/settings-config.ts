@@ -2322,6 +2322,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         step: 0.5,
         audience: ["Planlamacı", "Yönetim"],
       },
+      {
+        // T1 (2026-11-28): backend `readDokumaDrawingInMaxFrames` (kayıt yok = 12) ve DB tavanı 16 ile birebir.
+        key: "dokumaDrawingInMaxFrames",
+        title: "Tahar planında en çok çerçeve",
+        desc: "Tahar planına girilebilecek en yüksek çerçeve sayısı. Varsayılan 12; tezgâhlarınızda daha çok çerçeve varsa 16'ya kadar artırın. Kayıtlı planlar değişmez, yalnız yeni ya da düzenlenen planda sınır uygulanır.",
+        min: 1,
+        max: 16,
+        fallback: 12,
+        unit: "çerçeve",
+        step: 1,
+        audience: ["Planlamacı", "Yönetim"],
+      },
     ],
   },
   {

@@ -60,6 +60,15 @@ function main(): void {
   const custom = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, drawingInType: "CUSTOM" });
   check("§5h özel tahar düz çizilir (bugünkü)", grid(custom?.cells) === grid(computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null })?.cells));
 
+  // T1 tahar planı — panel `weave-drawdown.test` "tahar planı" örnekleriyle aynı (parite).
+  console.log("§6 kumaşın tahar planı");
+  const planned = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, drawingInType: "SKIP", threading: [1, 1, 2, 3, 4] });
+  check("§6a plan türün önüne geçer: tahar 1-1-2-3-4, 5 tel", planned?.threading.join() === "1,1,2,3,4" && grid(planned?.cells) === "00111/11011/11101/11110", grid(planned?.cells));
+  const over = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, drawingInType: "SKIP", threading: [1, 5] });
+  check("§6b plan örgü genişliğini aşarsa türden türetilir (geri uyum)", grid(over?.cells) === grid(skip?.cells), grid(over?.cells));
+  const empty = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, threading: [] });
+  check("§6c boş plan = bugünkü düz çizim", grid(empty?.cells) === grid(custom?.cells));
+
   console.log("§4 pencere");
   check("§4a 14 zemin, 30 armür + 30 seçici → 28 tel × 30 atkı", JSON.stringify(drawdownWindow(14, 30, 30)) === '{"ends":28,"picks":30}', JSON.stringify(drawdownWindow(14, 30, 30)));
   check("§4b 4 zemin, 4 armür + 6 seçici → 24 × 24 (EKOK 12'nin katı)", JSON.stringify(drawdownWindow(4, 4, 6)) === '{"ends":24,"picks":24}', JSON.stringify(drawdownWindow(4, 4, 6)));

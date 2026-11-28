@@ -191,6 +191,15 @@ async function readWeaveDesignRef(raw: unknown): Promise<string | null> {
   return raw;
 }
 
+/** T1: tahar planı bağı — aktif `DrawingInPlan` (400); `null`/boş temizler. */
+async function readDrawingInPlanRef(raw: unknown): Promise<string | null> {
+  if (raw === null || raw === "") return null;
+  if (typeof raw !== "string") throw AppError.badRequest("Tahar planı kimliği geçersiz.");
+  const n = await prisma.drawingInPlan.count({ where: { id: raw, isActive: true } });
+  if (n === 0) throw AppError.badRequest("Tahar planı bulunamadı ya da pasif", { code: "DRAWING_IN_PLAN_NOT_FOUND" });
+  return raw;
+}
+
 /** SY-A2: ürün başka atkı kartına geçerken varyant değişimlerinin sırası yeni kartta kalmalı (409). */
 async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknown): Promise<void> {
   if (weftSpecId === undefined) return;
@@ -200,7 +209,7 @@ async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknow
 }
 
 /** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
-const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique", "fabricTypeId", "flameRetardancy", ...FABRIC_TRADE_KEYS] as const;
+const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "drawingInPlanId", "fabricTechnique", "fabricTypeId", "flameRetardancy", ...FABRIC_TRADE_KEYS] as const;
 
 /**
  * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
@@ -220,13 +229,14 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
   if (present.includes("composition")) out.composition = parseTextField(data.composition, "Kompozisyon", 200) ?? null;
   if (present.includes("weftSpecId")) out.weftSpecId = await readWeftSpecRef(data.weftSpecId);
   if (present.includes("weaveDesignId")) out.weaveDesignId = await readWeaveDesignRef(data.weaveDesignId);
+  if (present.includes("drawingInPlanId")) out.drawingInPlanId = await readDrawingInPlanRef(data.drawingInPlanId);
   if (present.includes("fabricTechnique")) out.fabricTechnique = readFabricTechnique(data.fabricTechnique);
   if (present.includes("fabricTypeId")) out.fabricTypeId = await readFabricTypeRef(data.fabricTypeId, itemId);
   if (present.includes("flameRetardancy")) out.flameRetardancy = readFlameRetardancy(data.flameRetardancy);
   Object.assign(out, readFabricTradeFields(data));
   const setsValue = Object.values(out).some((v) => v !== null);
   if (setsValue && itemType !== undefined && itemType !== "FABRIC") {
-    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı/kumaş türü/yanmazlık/top boyu/asgari sipariş/bakım talimatı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
+    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı/tahar planı/kumaş türü/yanmazlık/top boyu/asgari sipariş/bakım talimatı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
   }
   return out;
 }
