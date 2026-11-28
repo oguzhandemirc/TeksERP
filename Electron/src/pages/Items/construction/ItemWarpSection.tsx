@@ -48,7 +48,7 @@ export function ItemWarpSection({ form, canWrite, itemId, layersVisible = false 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <FormField label="Çözgü kartı" info="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; devere siparişi ve levent takibi çözgü kartına bağlıdır">
+        <FormField label="Çözgü kartı" info="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; devere siparişi ve levent takibi çözgü kartına bağlıdır. Maliyet, gramaj, kompozisyon ve iplik ihtiyacında tel sayısı, çekme, fire ve denye bu karttan alınır; levent sonucu raporu ve tablet iş kartı da bunu gösterir.">
           <Controller
             control={form.control}
             name="warpSpecId"

@@ -38,7 +38,7 @@ export function ItemCompositionField({ form, itemId }: { form: UseFormReturn<Ite
       label="Kompozisyon"
       htmlFor="composition"
       error={form.formState.errors.composition}
-      info="Boş bırakılırsa çözgü ve atkı ipliklerinin lif bileşiminden hesaplanır. Yazarsan elle düzeltme olarak saklanır."
+      info="Boş bırakılırsa çözgü ve atkı ipliklerinin ağırlığı × lif payından hesaplanır. Yazarsan hesaplananın yerine bu gösterilir. Yalnız bilgi; hiçbir hesaba girmez."
     >
       <Input id="composition" placeholder={computedOk ?? "ör. %83 PES %17 VIS"} {...form.register("composition")} />
       {computed && (

@@ -40,18 +40,22 @@ const ALL = () => true;
 const IDENTITY_COUNT = 3;
 /** T1 (ürün kartı denetimi): aile örgüyü/kumaş türünü tekrar sormaz — onların yeri başka. */
 export const FAMILY_INFO = "Desenleri gruplayan ad (ör. BALIK). Toplu atkı ücreti ve listede gruplama içindir. Kumaş türü (tül/fon) ürün kartında, örgü desen kartında seçilir; buraya yazmayın. (Eski adı: Aile etiketi)";
+const CODE_INFO = "Desen kartının kimliği; seçicilerde, listelerde ve desen kartı çıktısında görünür. Hiçbir hesaba girmez.";
+const NAME_INFO = "Seçicilerde ve listelerde görünen ad. Hiçbir hesaba girmez.";
+const REPEAT_INFO = "Desenin boyuna bir kez tekrar ettiği uzunluk. Teknik özetteki rapor/m = 100 ÷ rapor boyu; desen kartı çıktısına basılır.";
+const SHOW_ONLY_INFO = "Yalnız gösterim (tablet, desen kartı çıktısı); hiçbir hesaba girmez.";
 const FIELDS: FieldDef[] = [
-  { key: "code", label: "Desen kodu", required: true, max: 32, span: 2, show: ALL },
-  { key: "name", label: "Desen adı", required: true, max: 100, span: 4, show: ALL },
+  { key: "code", label: "Desen kodu", required: true, max: 32, span: 2, info: CODE_INFO, show: ALL },
+  { key: "name", label: "Desen adı", required: true, max: 100, span: 4, info: NAME_INFO, show: ALL },
   { key: "familyLabel", label: "Desen ailesi", max: 40, info: FAMILY_INFO, placeholder: "ör. BALIK", span: 2, show: ALL },
-  { key: "frameCount", label: "Çerçeve sayısı", max: 2, mode: "numeric", info: "Armürün kullandığı çerçeve (gücü) sayısı; 1–32.", show: (m) => m === "DOBBY" },
-  { key: "repeatCm", label: "Desen rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m !== "JACQUARD" },
-  { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, span: 2, show: (m) => m === "DOBBY" },
-  { key: "loomFileName", label: "Desen dosyası", max: 64, span: 2, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
-  { key: "hookCount", label: "Kanca sayısı", max: 5, mode: "numeric", info: "Jakar makinesinin kullandığı kanca (platin) sayısı; her kanca bir ya da birkaç çözgü telini kaldırır. 1–30.000.", show: (m) => m === "JACQUARD" },
-  { key: "repeatWidthCm", label: "Desen rapor eni (cm)", max: 10, mode: "decimal", info: "Desenin enine bir kez tekrar ettiği genişlik.", show: (m) => m === "JACQUARD" },
-  { key: "repeatCm", label: "Desen rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m === "JACQUARD" },
-  { key: "lenoSetup", label: "Döner kurulumu", max: 100, span: 3, show: (_m, f) => f.weaveStructure === "LENO" },
+  { key: "frameCount", label: "Çerçeve sayısı", max: 2, mode: "numeric", info: "Armürün kullandığı çerçeve (gücü) sayısı; 1–32. Desen örgüsü bundan fazla çerçeve kullanırsa uyarı çıkar; tablette ve desen kartı çıktısında görünür.", show: (m) => m === "DOBBY" },
+  { key: "repeatCm", label: "Desen rapor boyu (cm)", max: 10, mode: "decimal", info: REPEAT_INFO, show: (m) => m !== "JACQUARD" },
+  { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, span: 2, info: SHOW_ONLY_INFO, show: (m) => m === "DOBBY" },
+  { key: "loomFileName", label: "Desen dosyası", max: 64, span: 2, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur. Yalnız gösterim (tablet, desen kartı çıktısı); hesaba girmez.", show: (m) => m === "JACQUARD" },
+  { key: "hookCount", label: "Kanca sayısı", max: 5, mode: "numeric", info: "Jakar makinesinin kullandığı kanca (platin) sayısı; her kanca bir ya da birkaç çözgü telini kaldırır. 1–30.000. Yalnız gösterim (tablet, desen kartı çıktısı); hesaba girmez.", show: (m) => m === "JACQUARD" },
+  { key: "repeatWidthCm", label: "Desen rapor eni (cm)", max: 10, mode: "decimal", info: "Desenin enine bir kez tekrar ettiği genişlik. Yalnız gösterim (tablet, desen kartı çıktısı); hesaba girmez.", show: (m) => m === "JACQUARD" },
+  { key: "repeatCm", label: "Desen rapor boyu (cm)", max: 10, mode: "decimal", info: REPEAT_INFO, show: (m) => m === "JACQUARD" },
+  { key: "lenoSetup", label: "Döner kurulumu", max: 100, span: 3, info: SHOW_ONLY_INFO, show: (_m, f) => f.weaveStructure === "LENO" },
 ];
 
 function toForm(d: WeaveDesign): Form {
@@ -114,7 +118,7 @@ export function StructureTab({ design, fabric, canWrite, onOpenItem }: { design:
         {m === "JACQUARD" && savedMech !== "JACQUARD" && (
           <p className={`text-xs text-muted-foreground ${FULL_ROW}`}>Desen görseli, mekanizma Jakar olarak kaydedildikten sonra yüklenebilir.</p>
         )}
-        <FormField className={FULL_ROW} label="Not" htmlFor="wd-notes">
+        <FormField className={FULL_ROW} label="Not" htmlFor="wd-notes" info="Serbest not. Yalnız bilgi; hiçbir hesaba girmez.">
           <Textarea id="wd-notes" value={form.notes} maxLength={500} disabled={!canWrite} onChange={(e) => set("notes", e.target.value)} />
         </FormField>
         {canWrite && (

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { SequenceBoxEditor } from "@/components/weave/SequenceBoxEditor";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
 
 /** `channel`: tezgâhın renk seçicisindeki kanal (1..16), boş = girilmedi; satıra aittir. */
 export interface WeftRow { yarnItemId: string; picks: string; channel?: string }
@@ -66,6 +67,7 @@ interface Props {
 
 export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefix = "wf", rowExtra, header }: Props) {
   const { seq, picksPerCm, program, rows } = value;
+  const yarnForm = useItemRecordForm(["YARN"]); // seçicide Yeni · Örnek al: kartı bırakmadan iplik aç
   const derived = seq.trim() !== "";
   const set = (patch: Partial<WeftContent>) => onChange({ ...value, ...patch });
   const setRow = (i: number, patch: Partial<WeftRow>) => set({ rows: rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
@@ -82,11 +84,17 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
           <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. 10x(A2 B2 C1) D4" />
         </div>
         <div className="space-y-1.5">
-          <div className="flex h-5 items-center"><Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label></div>
+          <div className="flex h-5 items-center gap-1">
+            <Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label>
+            <InfoPopover label="Atkı sıklığı nerede kullanılır" desc={PPC_INFO} />
+          </div>
           <Input id={`${idPrefix}-ppc`} value={picksPerCm} inputMode="decimal" disabled={!canWrite} onChange={(e) => set({ picksPerCm: e.target.value })} placeholder="ör. 22" />
         </div>
         <div className="space-y-1.5">
-          <div className="flex h-5 items-center"><Label htmlFor={`${idPrefix}-prog`}>Atkı program no</Label></div>
+          <div className="flex h-5 items-center gap-1">
+            <Label htmlFor={`${idPrefix}-prog`}>Atkı program no</Label>
+            <InfoPopover label="Atkı program no nerede kullanılır" desc={PROGRAM_INFO} />
+          </div>
           <Input id={`${idPrefix}-prog`} value={program} maxLength={16} disabled={!canWrite} onChange={(e) => set({ program: e.target.value })} placeholder="ör. 6037" />
         </div>
       </div>
@@ -101,6 +109,7 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
               onChange={(id) => setRow(i, { yarnItemId: id ?? "" })}
               service={itemService}
               queryKey="items-weft-yarn"
+              recordForm={canWrite ? yarnForm : undefined}
               filters={{ itemType: "YARN", lifecycleStatus: "ACTIVE" }}
               getLabel={(it) => it.name}
               getSubLabel={yarnSubLabel}
@@ -151,13 +160,21 @@ function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
 }
 
 const SEQ_INFO = "Harf = atkı ipliği satırı (A = 1. satır), sayı = arka arkaya kaç atkı atıldığı: ör. A4 B1 A4 C1. "
-  + "Tekrar eden kısmı parantezle kısaltabilirsiniz: 10x(A2 B2 C1) D4 = parantez içi 10 kez, ardından 4 atkı D (54 atkı).";
+  + "Tekrar eden kısmı parantezle kısaltabilirsiniz: 10x(A2 B2 C1) D4 = parantez içi 10 kez, ardından 4 atkı D (54 atkı). "
+  + "Doluysa satırların atış adedi bundan türetilir; atkı sırası tablete, armür planına ve desen kartı çıktısına gider.";
+
+const PPC_INFO = "Atkı kg/m = sıklık × 100 × en (m) × iplik payı × denye ÷ 9.000.000 ÷ (1 − fire). "
+  + "Teorik m/saat = devir/dk ÷ atkı/cm × 0,6; tezgâh süresi, atkı ücreti maliyeti, üretim önerisi süresi ve tezgâh yükü bundan. Tablet iş kartında görünür.";
+
+const PROGRAM_INFO = "Tezgâhtaki atkı programının numarası. Yalnız bilgi; tablette ve desen kartı çıktısında görünür, hiçbir hesaba girmez.";
+
+const YARN_INFO = "Denye, fire ve alım birimi (kg, adet, metre) bu iplik kartından alınır; kg ve maliyet buna göre hesaplanır.";
 
 const PICKS_INFO = "Desenin bir tekrarında (raporunda) bu iplikle kaç atkı atıldığı. Ör. sıra A4 B1 ise A ipliği 4, B ipliği 1. "
-  + "Atkı raporu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliklerin kumaştaki payı bu sayılardan bulunur.";
+  + "Atkı raporu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliğin payı = adet ÷ toplam adet; maliyet ve kompozisyon bu paydan hesaplanır.";
 
 const CHANNEL_INFO = "Tezgâhın renk seçicisinde bu ipliğin takıldığı kanal (1–16). Boş bırakılabilir; aynı kartta iki iplik aynı kanalda olamaz. "
-  + "Tablet dokumacıya \"Kanal 3\" diye gösterir.";
+  + "Yalnız bilgi: tablet dokumacıya \"Kanal 3\" diye gösterir, desen kartı çıktısına basılır; hesaba girmez.";
 
 // Satır ve başlık aynı ızgarayı paylaşır: harf · iplik · adet · kanal · [pay %] · sil.
 const rowGrid = (extra: boolean) => (extra ? "sm:grid-cols-[2rem_1fr_8rem_4.5rem_4.5rem_2.5rem]" : "sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]");
@@ -167,7 +184,7 @@ export function WeftRowsHeader({ extra }: { extra?: string }) {
   return (
     <div className={`hidden gap-2 text-xs text-muted-foreground sm:grid ${rowGrid(Boolean(extra))}`}>
       <span />
-      <span>Atkı ipliği</span>
+      <span className="flex items-center gap-1 whitespace-nowrap">Atkı ipliği<InfoPopover label="Atkı ipliği nerede kullanılır" desc={YARN_INFO} /></span>
       {/* 8rem sütunda uzun başlık 1440'ta iki satıra kırılıyordu: kısa etiket, tam anlam ⓘ'de. */}
       <span className="flex items-center gap-1 whitespace-nowrap">Atış adedi<InfoPopover label="Atkı raporundaki atkı adedi" desc={PICKS_INFO} /></span>
       <span className="flex items-center gap-1 whitespace-nowrap">Kanal<InfoPopover label="Renk seçici kanalı" desc={CHANNEL_INFO} /></span>
