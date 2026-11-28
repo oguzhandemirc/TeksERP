@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { formatQty } from "@/lib/format";
 import { LIFT_PLAN_MAX_FRAMES, LIFT_PLAN_MAX_PICKS, liftPlanForSave } from "../lift-plan";
 import { constructionApi, weaveDesignApi } from "../service";
+import { drawingInPlanService } from "@/pages/DrawingInPlans/service";
 import { LiftPlanGrid } from "./LiftPlanGrid";
 import { LiftPlanToolbar } from "./LiftPlanToolbar";
 import { FabricPreviewSection } from "./FabricPreviewSection";
@@ -42,6 +43,13 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
     queryKey: ["item-construction", fabric?.id ?? null, null],
     queryFn: () => constructionApi.get(fabric!.id),
     enabled: !!fabric,
+  });
+  // T1: kumaşın tahar planı (ürün kartı Çözgü) — basılı kart gibi önizleme de ondan çizilir.
+  const planId = fabric?.drawingInPlanId ?? null;
+  const drawingInPlan = useQuery({
+    queryKey: ["drawing-in-plans", "detail", planId],
+    queryFn: () => drawingInPlanService.getById(planId!).then((r) => r.data),
+    enabled: !!planId,
   });
   const weft = construction.data?.weft ?? null;
   const selector = weft?.pickSequence ?? null;
@@ -92,7 +100,8 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
           </section>
           {size.picks > 0 && (
             <FabricPreviewSection design={design} plan={plan} lenoFrames={lenoList} selvedgeFrames={selvList} selector={selector}
-              yarnNames={weft?.yarns.map((y) => y.yarnItem.name) ?? []} direction={direction} />
+              yarnNames={weft?.yarns.map((y) => y.yarnItem.name) ?? []} direction={direction}
+              drawingInPlan={planId ? drawingInPlan.data ?? null : null} />
           )}
         </div>
       )}
