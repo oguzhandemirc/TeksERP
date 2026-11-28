@@ -155,7 +155,7 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     const user = userEvent.setup();
     suggest.mockResolvedValue({ endsCount: 7000, diffKg: null, denier: null });
     renderDialog({ initial: spec });
-    await user.click(screen.getByRole("button", { name: /Taraktan/ }));
+    await user.click(screen.getByRole("button", { name: "Taraktan tel öner" }));
     // Saklama diş/10 cm (K9): tarak no 200 → öneri ucuna 20 diş/cm.
     await waitFor(() => expect(suggest).toHaveBeenCalledWith({ kind: "REED", reedPerCm: 20, widthCm: 350, endsPerDent: 1 }));
     expect((await screen.findByTestId("reed-helper-note")).textContent).toContain("paylaştırın");
