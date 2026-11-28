@@ -16,6 +16,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDevereBeamBodyMode } from "@/hooks/usePricingEnabled";
+import { AtWarpersTab } from "./AtWarpersTab";
 import { BeamBodiesList } from "./BeamBodiesList";
 import { BeamBodyFormDialog } from "./BeamBodyFormDialog";
 import { BeamBodyModeGate } from "./BeamBodyModeGate";
@@ -25,6 +26,7 @@ import { BEAM_BODIES_QUERY_KEY, BEAM_BODY_RETURNS_QUERY_KEY, beamBodyPath } from
 
 const TABS = [
   { value: "bodies", label: "Gövdeler" },
+  { value: "at-warpers", label: "Devereci elinde" },
   { value: "owner-return", label: "Sahibine iade" },
   { value: "returns", label: "İade belgeleri" },
 ] as const;
@@ -70,6 +72,7 @@ export function BeamBodiesPage() {
           </TabsList>
         </Tabs>
         {tab === "bodies" && <BeamBodiesList />}
+        {tab === "at-warpers" && <AtWarpersTab />}
         {tab === "owner-return" && <OwnerReturnTab onCreated={() => setTab("returns")} />}
         {tab === "returns" && <ReturnDocsTab />}
         {creating && <BeamBodyFormDialog initial={null} onClose={() => setCreating(false)} onSaved={(b) => openTarget(beamBodyPath(b.id))} />}

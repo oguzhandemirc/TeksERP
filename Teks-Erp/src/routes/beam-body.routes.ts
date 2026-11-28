@@ -18,6 +18,7 @@ import {
 } from "../services/beam-body/write";
 import { BEAM_BODY_OWNER_KINDS, BEAM_BODY_REGISTER_STATUSES, type BeamBodyOwnerKind } from "../constants/beam-body";
 import { BEAM_BODY_COUNT_MAX_CODES, beamBodyCountContext, previewBeamBodyCount } from "../services/beam-body/count";
+import { listBodiesAtWarpers } from "../services/beam-body/at-warper";
 import beamBodyMovementRoutes from "./beam-body-movement.routes";
 import beamBodyStatementRoutes from "./beam-body-statement.routes";
 import "../types/express-augment";
@@ -91,6 +92,8 @@ const ListQuery = z.object({
 }).passthrough();
 const FILTERS = ["owner", "ownerCustomerId", "status", "subcontractorId", "machineId", "warehouseId", "ownerReturnDue", "active", "minAgeDays"];
 const ACTIVE = ["active", "inactive", "all"] as const;
+const AT_WARPER_FILTERS = ["subcontractorId"];
+const AtWarperQuery = z.object({ search: z.string().max(64).optional() });
 
 /**
  * @openapi
@@ -233,7 +236,32 @@ router.get("/resolve", requireAnyPermission("beam-body:read", ...MOBILE_DEVERE_K
  *       200: { description: "{ success, data: { scope, expectedCount, matched[], missing[], unexpected[], unknown[] } }" }
  *       400: { description: "VALIDATION_ERROR · BEAM_BODY_PLACE_INVALID" }
  */
-router.get("/count-context", requireAnyPermission("beam-body:read", ...MOBILE_BEAM_BODY_COUNT), wrap(async () => {
+/**
+ * @openapi
+ * /api/beam-bodies/at-warpers:
+ *   get:
+ *     tags: [BeamBody]
+ *     summary: Devereci elindeki gövdelerimiz (D3) — devereci × boş gövde; deverecinin kendi gövdesi girmez; sayılar sunucuda
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: "filter[subcontractorId]", schema: { type: string }, description: "CSV devereci id" }
+ *       - { in: query, name: search, schema: { type: string }, description: "Gövde no" }
+ *     responses:
+ *       200: { description: "{ success, data: [{ subcontractor, count, bodies[] }], summary: { bodyCount, warperCount }, truncated }" }
+ *       400: { description: "FILTER_UNKNOWN" }
+ *       403: { description: "MODULE_DISABLED · BEAM_BODY_MODE_OFF · beam-body:read yok" }
+ */
+router.get("/at-warpers", requirePermission("beam-body:read"), wrap(async (req) => {
+  assertNoBareFilterParams(req, AT_WARPER_FILTERS);
+  const f = parseQueryParams(req).filters;
+  const unknown = Object.keys(f).filter((k) => !AT_WARPER_FILTERS.includes(k));
+  if (unknown.length > 0) throw AppError.badRequest(`Tanınmayan süzgeç: ${unknown.join(", ")}`, { code: "FILTER_UNKNOWN", params: unknown });
+  const q = parse(AtWarperQuery, req.query);
+  const out = await listBodiesAtWarpers({ subcontractorId: readIdCondition(f.subcontractorId), search: q.search });
+  return { status: 200, body: { success: true, ...out } };
+}));
+
+router.get("/count-context",requireAnyPermission("beam-body:read", ...MOBILE_BEAM_BODY_COUNT), wrap(async () => {
   return { status: 200, body: { success: true, data: await beamBodyCountContext() } };
 }));
 
