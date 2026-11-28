@@ -21,7 +21,7 @@ import { singleOwner } from "../helpers/emanet-owner.helper";
 import { readYarnStock } from "../helpers/maliyet-bridge.helper";
 import { readDevereFasonLotPolicy, readDevereLotRequired, type DevereFasonLotPolicy } from "../system-setting.service";
 import { carryOverByYarn, loadWarpingYarnHoldings, loadWarpingYarnItems, lotKey, receivedKg, sumByYarn, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
-import { WARPING_ORDER_TABLE } from "./create";
+import { WARPING_ORDER_TABLE } from "./table";
 import { loadWarpingOrderDto } from "./read";
 import { buildWarpingInstruction, type WarpingInstruction } from "./instruction";
 import { qtyText } from "../helpers/qty-text.helper";
@@ -102,6 +102,12 @@ export function openItems(items: WarpingYarnItem[]): WarpingYarnItem[] {
 // H1: koli/bobin imzaya girer (aynı token farklı adet → 409); iki taraf da bu fonksiyondan, eski kayıt null ↔ boş.
 const lineSig = (lines: Array<{ yarnItemId: string; warehouseId: string; lotId: string | null; qty: Prisma.Decimal.Value; packageCount?: number | null; bobbinCount?: number | null }>) =>
   lines.map((l) => `${l.yarnItemId}|${l.warehouseId}|${l.lotId ?? ""}|${D(l.qty).toFixed(3)}|${l.packageCount ?? ""}|${l.bobbinCount ?? ""}`).sort().join(",");
+/** Kayıtlı sevk kalemlerinin imzası (replay kimliği) — elle sevk ve siparişle doğan ilk sevk aynı biçimi okur. */
+export const dispatchItemsSig = (items: Array<{ yarnItemId: string | null; warehouseId: string | null; lotId: string | null; dispatchedQty: Prisma.Decimal.Value; packageCount: number | null; bobbinCount: number | null }>) =>
+  lineSig(items.map((i) => ({ yarnItemId: i.yarnItemId ?? "", warehouseId: i.warehouseId ?? "", lotId: i.lotId, qty: i.dispatchedQty, packageCount: i.packageCount, bobbinCount: i.bobbinCount })));
+/** Gelen sevk satırlarının imzası — `dispatchItemsSig` ile aynı biçim (kg 3 ondalığa yuvarlanır). */
+export const dispatchInputSig = (lines: WarpingDispatchLineInput[]) =>
+  lineSig(lines.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qty: D(l.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP), packageCount: l.packageCount ?? null, bobbinCount: l.bobbinCount ?? null })));
 
 async function loadDispatchResult(dispatchId: string, warnings: string[], replayed: boolean): Promise<WarpingDispatchResult> {
   const d = await prisma.subcontractorDispatch.findUnique({
@@ -139,7 +145,7 @@ function dispatchReplay(warpingOrderId: string, input: WarpingDispatchInput) {
     },
     identity: (hit) => [
       { ad: "warpingOrderId", mevcut: hit.warpingOrderId ?? "", gelen: warpingOrderId },
-      { ad: "lines", mevcut: lineSig(hit.items.map((i) => ({ yarnItemId: i.yarnItemId ?? "", warehouseId: i.warehouseId ?? "", lotId: i.lotId, qty: i.dispatchedQty, packageCount: i.packageCount, bobbinCount: i.bobbinCount }))), gelen: lineSig(input.lines.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qty: D(l.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP), packageCount: l.packageCount ?? null, bobbinCount: l.bobbinCount ?? null }))) },
+      { ad: "lines", mevcut: dispatchItemsSig(hit.items), gelen: dispatchInputSig(input.lines) },
       // B2: boş gövde kümesi kimliğe girer (aynı token farklı gövdeler → 409); eski kayıt/istemci boş ↔ boş.
       { ad: "beamBodyIds", mevcut: hit.beamBodyEvents.map((e) => e.bodyId).sort().join(","), gelen: normalizeBeamBodyIds(input.beamBodyIds).join(",") },
     ],
@@ -148,7 +154,7 @@ function dispatchReplay(warpingOrderId: string, input: WarpingDispatchInput) {
   });
 }
 
-function validateLines(lines: WarpingDispatchLineInput[]): void {
+export function validateLines(lines: WarpingDispatchLineInput[]): void {
   if (lines.length === 0) throw AppError.badRequest("Sevkte en az bir iplik satırı olmalı.", { code: "WARPING_DISPATCH_EMPTY" });
   if (lines.length > WARPING_DISPATCH_MAX_LINES) throw AppError.badRequest(`Bir sevkte en çok ${WARPING_DISPATCH_MAX_LINES} iplik satırı olabilir.`);
   const seen = new Set<string>();

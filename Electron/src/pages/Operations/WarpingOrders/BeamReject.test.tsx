@@ -56,6 +56,7 @@ const order = (status: WarpingOrder["status"] = "IN_PROGRESS") => ({
   id: "wo-1", orderNo: "FDV1", status, subcontractor: { id: "s1", code: "S", name: "Devereci A" },
   warpSpec: { id: "ws1", code: "CK1", name: "Tül zemin" }, targetLengthM: "1000.000", beamCount: 1,
   beamLines: [{ beamCount: 1, beamLengthM: "500.000" }], yarns: [{ yarnItemId: "y1", code: "IPL-5X", name: "5X" }],
+  fee: { unit: "METRE", unitPrice: null, currency: null }, totals: { endsCount: 6000, netKg: "0", grossKg: "0" },
 }) as unknown as WarpingOrder;
 const settlement: WarpingSettlement = { metre: { targetM: "1000.000", receivedM: "1000.000", diffM: "0.000", diffPct: "0.00", planBeamCount: 2, receivedBeamCount: 2 }, yarns: [], weighing: null };
 const b = (id: string, beamNo: string, status: string, reworkOfBeamId: string | null = null) => ({

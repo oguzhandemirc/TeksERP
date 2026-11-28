@@ -56,7 +56,8 @@ export interface WarpingPlanYarn {
 }
 
 export interface WarpingPlan {
-  spec: { id: string; code: string; name: string };
+  /** `sequenceNote`: ana kartın dizilim notu (önizleme şeridi için; plana girmez). */
+  spec: { id: string; code: string; name: string; sequenceNote: string | null };
   extras: Array<{ id: string; code: string; name: string }>;
   beamLines: Array<{ beamCount: number; beamLengthM: Prisma.Decimal; sortOrder: number }>;
   /** NULL = levent adedi belli değil (devereciye bırakıldı; satır yok, hedef yalnız toplam metre). */
@@ -160,7 +161,7 @@ export async function computeWarpingPlan(db: Db, input: WarpingPlanInput): Promi
   const cardIds = [input.warpSpecId, ...extraIds];
   const cards = await db.warpSpec.findMany({
     where: { id: { in: cardIds } },
-    select: { id: true, code: true, name: true, isActive: true, wastePct: true, ...WARP_SPEC_YARN_LINES_SELECT },
+    select: { id: true, code: true, name: true, isActive: true, wastePct: true, sequenceNote: true, ...WARP_SPEC_YARN_LINES_SELECT },
   });
   const byId = new Map(cards.map((c) => [c.id, c]));
   for (const id of cardIds) {
@@ -221,7 +222,7 @@ export async function computeWarpingPlan(db: Db, input: WarpingPlanInput): Promi
   yarns.forEach((y, i) => (y.sortOrder = i));
   const main = byId.get(input.warpSpecId)!;
   return {
-    spec: { id: main.id, code: main.code, name: main.name },
+    spec: { id: main.id, code: main.code, name: main.name, sequenceNote: main.sequenceNote },
     extras: extraIds.map((id) => ({ id, code: byId.get(id)!.code, name: byId.get(id)!.name })),
     beamLines, beamCount, targetLengthM, hasWaste, wasteSources, yarns,
   };

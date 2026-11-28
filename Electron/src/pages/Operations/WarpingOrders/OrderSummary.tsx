@@ -10,6 +10,8 @@ import { useReedUnit } from "@/hooks/useReedUnit";
 import { useWarpingPreview } from "./service";
 import type { WarpingOrder } from "./types";
 import { orderPreviewBody, percentWasteText } from "./waste-model";
+import { sentText, sentTotals, warpReportText } from "./report-model";
+import { useWarpingDispatches } from "./yarn-service";
 
 function Item({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
@@ -32,6 +34,18 @@ function WasteItem({ o }: { o: WarpingOrder }) {
       <span className="block text-xs text-muted-foreground">
         sabit {fmtM(o.fixedWasteM)} m · tolerans {o.wasteTolerancePct === null ? "denetim yok" : `%${formatQty(o.wasteTolerancePct, 2, 0)}`}
       </span>
+    </Item>
+  );
+}
+
+/** Gönderilen iplik: canlı sevklerin brüt kg'ı + bobin toplamı (Sevkler bölümüyle aynı sorgu, önbellekten). */
+function SentItem({ orderId }: { orderId: string }) {
+  const q = useWarpingDispatches(orderId);
+  const t = q.data ? sentText(sentTotals(q.data)) : null;
+  return (
+    <Item label="Gönderilen iplik" className="sm:col-span-2">
+      <span data-testid="order-sent-totals" className="tabular-nums">{t ? t.main : q.isError ? "okunamadı" : "…"}</span>
+      {t?.note && <span className="block text-xs text-amber-700 dark:text-amber-400">{t.note}</span>}
     </Item>
   );
 }
@@ -76,11 +90,10 @@ export function OrderSummary({ o }: { o: WarpingOrder }) {
       </Item>
       <Item label="Tarak">{reed || "—"}</Item>
       <Item label="Açılış">{fmtFactoryDateTime(o.createdAt)}</Item>
-      {o.warpSpec.sequenceNote && (
-        <Item label="Çözgü raporu"className="sm:col-span-2">
-          {o.warpSpec.sequenceNote}
-        </Item>
-      )}
+      <Item label="Çözgü raporu" className="sm:col-span-2">
+        <span data-testid="order-warp-report">{warpReportText(o)}</span>
+      </Item>
+      <SentItem orderId={o.id} />
       {o.notes && (
         <Item label="Not" className="sm:col-span-2">
           {o.notes}

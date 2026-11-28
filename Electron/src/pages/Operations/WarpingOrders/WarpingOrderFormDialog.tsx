@@ -16,10 +16,13 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { BeamLinesFieldset, OrderIdentityFields, OrderNotesField, OrderTermsFields, SalesOrderLinks } from "./OrderFormFields";
 import { PlanPreview } from "./PlanPreview";
+import { InitialDispatchFields } from "./InitialDispatchFields";
+import { buildInitialDispatch, initialTotalKg, type InitialDrafts } from "./initial-dispatch-model";
 import {
   buildOrderBody,
   editModeOf,
   emptyOrderForm,
+  fmtKg,
   formFromOrder,
   previewBody,
   rememberExtraOptions,
@@ -57,26 +60,18 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   const nextMemo = rememberExtraOptions(extraMemo, s.warpSpecId, preview);
   if (nextMemo !== extraMemo) setExtraMemo(nextMemo);
   const extraOptions = mergeSpecs(nextMemo?.options ?? [], order?.extraSpecs ?? []);
-  const attempt = useAttemptToken();
-  const qc = useQueryClient();
-  const save = useMutation({
-    mutationFn: (body: ReturnType<typeof buildOrderBody> & { ok: true }) =>
-      order
-        ? warpingOrderService.update(order.id, body.body)
-        : warpingOrderService.create(body.body, attempt.token()),
-    onSuccess: (res) => {
-      attempt.onSuccess();
-      toastServerSuccess(res, order ? "Sipariş güncellendi." : "Sipariş açıldı.");
-      void qc.invalidateQueries({ queryKey: [WARPING_ORDERS_QUERY_KEY] });
-      onSaved(res.data.id);
-    },
-    onError: (e) => attempt.onFailure(e),
-  });
+  const [initial, setInitial] = useState<InitialDrafts>({});
+  // İlk sevk yalnız yeni siparişte ve iplik stoğu izleniyorken (iplik kapalıysa sevk zaten 403).
+  const initialYarns = mode === "create" && fresh && preview?.stock.known ? preview.yarns : null;
+  const initialKg = initialYarns ? initialTotalKg(initial, initialYarns.map((y) => y.yarnItemId)) : 0;
+  const save = useSaveOrder(order, onSaved);
   if (mode === null) return null;
   const submit = () => {
     const r = buildOrderBody(s, mode);
     if (!r.ok) return setError(r.error);
-    save.mutate(r);
+    const d = initialYarns ? buildInitialDispatch(initial, initialYarns) : ({ ok: true, value: undefined } as const);
+    if (!d.ok) return setError(d.error);
+    save.mutate(d.value ? { ...r, body: { ...r.body, initialDispatch: d.value } } : r);
   };
 
   return (
@@ -85,23 +80,8 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
       sectionsKey="warping-order.form"
       onOpenChange={(o) => !o && onClose()}
       title={order ? `${order.orderNo} — düzenle` : "Yeni fason devere siparişi"}
-      description={
-        !order
-          ? "Çözgü kartı ve levent adedi × boy (adet belli değilse toplam metre) girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır."
-          : planLocked
-            ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
-            : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır."
-      }
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Vazgeç
-          </Button>
-          <Button onClick={submit} disabled={save.isPending} className="min-w-32">
-            {save.isPending ? "Kaydediliyor…" : order ? "Kaydet" : "Siparişi aç"}
-          </Button>
-        </>
-      }
+      description={dialogDescription(Boolean(order), planLocked)}
+      footer={<DialogFooter onClose={onClose} onSubmit={submit} pending={save.isPending} isEdit={Boolean(order)} initialKg={initialKg} />}
     >
       <WideFormColumns
         sideWidth="wide"
@@ -125,6 +105,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         }
         after={
           <>
+            {initialYarns && <InitialDispatchFields yarns={initialYarns} drafts={initial} onChange={(d) => { setError(null); setInitial(d); }} />}
             <FormCard sectionId="terms" sectionError={error !== null} title="Ücret, termin ve fire" icon={Coins}>
               <OrderTermsFields s={s} up={up} planLocked={planLocked} feeAutoFill={!order} defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null} />
               <div className="mt-4">
@@ -140,6 +121,46 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         }
       />
     </WideFormDialog>
+  );
+}
+
+type SaveInput = ReturnType<typeof buildOrderBody> & { ok: true };
+
+function useSaveOrder(order: WarpingOrder | undefined, onSaved: (id: string) => void) {
+  const attempt = useAttemptToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SaveInput) =>
+      order ? warpingOrderService.update(order.id, body.body) : warpingOrderService.create(body.body, attempt.token()),
+    onSuccess: (res) => {
+      attempt.onSuccess();
+      toastServerSuccess(res, order ? "Sipariş güncellendi." : "Sipariş açıldı.");
+      void qc.invalidateQueries({ queryKey: [WARPING_ORDERS_QUERY_KEY] });
+      onSaved(res.data.id);
+    },
+    onError: (e) => attempt.onFailure(e),
+  });
+}
+
+function dialogDescription(isEdit: boolean, planLocked: boolean): string {
+  if (!isEdit)
+    return "Çözgü kartı ve levent adedi × boy (adet belli değilse toplam metre) girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır.";
+  return planLocked
+    ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
+    : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır.";
+}
+
+function DialogFooter(p: { onClose: () => void; onSubmit: () => void; pending: boolean; isEdit: boolean; initialKg: number }) {
+  const label = p.isEdit ? "Kaydet" : p.initialKg > 0 ? `Siparişi aç + sevk et (${fmtKg(p.initialKg)} kg)` : "Siparişi aç";
+  return (
+    <>
+      <Button variant="outline" onClick={p.onClose}>
+        Vazgeç
+      </Button>
+      <Button onClick={p.onSubmit} disabled={p.pending} className="min-w-32">
+        {p.pending ? "Kaydediliyor…" : label}
+      </Button>
+    </>
   );
 }
 

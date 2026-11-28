@@ -10,6 +10,7 @@ import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft, type ReceiveBodyDraft, type ReceiveWeighing } from "./receive-model";
 import { ReceiveBodyCell } from "./ReceiveBodyCell";
+import { OverrunNote, type OverrunCtx } from "./OverrunNote";
 import { availableOptions, type ReceiveBodyOptions } from "./receive-body-options";
 import type { ReworkCandidate } from "./rejection-model";
 import type { WarpingReceivePreview } from "./receive-types";
@@ -93,12 +94,15 @@ export function ReceiveBeamsTable({ drafts, onChange, reworks = [], options = {}
   );
 }
 
-function MetreLine({ p }: { p: WarpingReceivePreview }) {
+function MetreLine({ p, overrun }: { p: WarpingReceivePreview; overrun?: OverrunCtx }) {
   const m = p.before.metre;
+  const diff = Number(p.after.diffM);
   return (
     <p>
       Hedef <b>{fmtM(m.targetM)} m</b> ({isBeamCountOpen({ beamCount: m.planBeamCount, beamCountOpen: m.planBeamCountOpen }) ? "adet belli değil" : `${m.planBeamCount} levent`}) · şimdiye kadar {fmtM(m.receivedM)} m · bu kabul <b>{fmtM(p.incoming.lengthM)} m</b> ({p.incoming.beamCount} levent)
-      {" → "}gelen <b>{fmtM(p.after.receivedM)} m</b>, fark <span className={cn(Number(p.after.diffM) < 0 && "text-amber-700 dark:text-amber-400")}>{signedKg(p.after.diffM, fmtM)} m</span>
+      {" → "}gelen <b>{fmtM(p.after.receivedM)} m</b>, fark <span className={cn(diff < 0 && "text-amber-700 dark:text-amber-400", diff > 0 && "font-medium text-sky-800 dark:text-sky-300")}>{signedKg(p.after.diffM, fmtM)} m</span>
+      {/* Hedef üstü sarım serbest (fabrika 11-28): etiketlenir, ücret etkisi gösterilir, kabul engellenmez. */}
+      <OverrunNote diffM={p.after.diffM} ctx={overrun} className="ml-2 inline-block" />
     </p>
   );
 }
@@ -173,10 +177,10 @@ function WeighTable({ p }: { p: WarpingReceivePreview }) {
   );
 }
 
-export function ReceivePreviewView({ p }: { p: WarpingReceivePreview }) {
+export function ReceivePreviewView({ p, overrun }: { p: WarpingReceivePreview; overrun?: OverrunCtx }) {
   return (
     <div className="space-y-2" aria-label="Kabul önizlemesi">
-      <MetreLine p={p} />
+      <MetreLine p={p} overrun={overrun} />
       <YarnTable p={p} />
       {p.beams.some((b) => b.reworkOf) && (
         <ul className="space-y-0.5 rounded-md border p-3 text-xs" aria-label="Yeniden sarım bağları">

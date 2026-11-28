@@ -75,8 +75,23 @@ const MetaFields = {
   expectedReturnAt: z.iso.datetime({ offset: true, message: "Termin ISO tarih-saat olmalı" }).nullable().optional(),
   notes: z.string().max(500, "Not en çok 500 karakter").nullable().optional(),
 };
+/** Devere H1: koli / bobin adedi — BİLGİ (defter değil, kg tek kaynak); boş = girilmedi. */
+const PieceCount = (ad: string) => z.number({ message: `${ad} sayı olmalı` }).int(`${ad} tam sayı olmalı`).positive(`${ad} sıfırdan büyük olmalı`).max(100_000, `${ad} çok büyük`).nullable().optional();
+const DispatchLine = z.strictObject({
+  yarnItemId: Id,
+  warehouseId: Id,
+  lotId: Id.nullable().optional(),
+  qtyKg: z.number({ message: "İplik kg sayı olmalı" }).positive("İplik kg sıfırdan büyük olmalı").max(1_000_000, "İplik kg çok büyük"),
+  packageCount: PieceCount("Koli adedi"),
+  bobbinCount: PieceCount("Bobin adedi"),
+});
+const DispatchLines = z.array(DispatchLine).min(1, "En az bir iplik satırı gerekli").max(WARPING_DISPATCH_MAX_LINES, `En çok ${WARPING_DISPATCH_MAX_LINES} iplik satırı`);
 const PreviewBody = z.strictObject({ warpSpecId: Id, ...PlanFields });
-const CreateBody = z.strictObject({ clientToken: z.uuid("clientToken geçersiz (UUID)"), warpSpecId: Id, subcontractorId: Id, ...PlanFields, ...MetaFields });
+const CreateBody = z.strictObject({
+  clientToken: z.uuid("clientToken geçersiz (UUID)"), warpSpecId: Id, subcontractorId: Id, ...PlanFields, ...MetaFields,
+  // D2: sipariş açılırken ilk iplik sevki (opsiyonel; yoksa bugünkü gibi sevksiz).
+  initialDispatch: z.strictObject({ lines: DispatchLines }).optional(),
+});
 const PatchBody = z.strictObject({ ...PlanFields, ...MetaFields });
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
 const ListQuery = z.object({
@@ -136,8 +151,9 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  *               feeCurrency: { type: string, nullable: true }
  *               expectedReturnAt: { type: string, format: date-time, nullable: true }
  *               notes: { type: string, nullable: true }
+ *               initialDispatch: { type: object, description: "D2 — ilk iplik sevki aynı işlemde (sevk ucunun satır biçimi: yarnItemId, warehouseId, lotId, qtyKg, packageCount, bobbinCount); iplik modülü kapalıysa 403", properties: { lines: { type: array, items: { type: object } } } }
  *     responses:
- *       201: { description: Sipariş açıldı }
+ *       201: { description: "Sipariş açıldı — data.initialDispatch { id, dispatchNo, yarnTotalKg } | null; sevk uyarıları warnings" }
  *       200: { description: Aynı denemenin tekrarı (replay) }
  *       400: { description: "WARP_SPEC_INACTIVE · YARN_DENIER_MISSING · WARPING_EXTRA_NOT_SHARED · SALES_ORDER_CANCELLED · VALIDATION_ERROR" }
  *       409: { description: "WARPING_ORDER_CANCELLED · CLIENT_TOKEN_COLLISION" }
@@ -179,10 +195,22 @@ router.get("/", requirePermission("warping-order:read"), wrap(async (req) => {
   return { status: 200, body: { success: true, ...out } };
 }));
 
-router.post("/", requirePermission("warping-order:write"), wrap(async (req) => {
+/** D2: ilk sevk iplik HAREKETİ yazar → iplik kapısı yalnız `initialDispatch` gelince (sevksiz sipariş bugünkü gibi kapısız). */
+const requireIplikForInitialDispatch = (req: Request, res: Response, next: NextFunction) => {
+  const b: unknown = req.body;
+  if (b && typeof b === "object" && "initialDispatch" in b && b.initialDispatch != null) return void requireIplikEnabled(req, res, next);
+  next();
+};
+
+router.post("/", requirePermission("warping-order:write"), requireIplikForInitialDispatch, wrap(async (req) => {
   const body = parse(CreateBody, req.body);
   const out = await createWarpingOrder(body, req.user!.userId);
-  return { status: out.replayed ? 200 : 201, body: { success: true, data: out.data, message: out.replayed ? `${out.data.orderNo} zaten kayıtlı` : `Fason devere siparişi ${out.data.orderNo} açıldı` } };
+  const d = out.initialDispatch;
+  const opened = `Fason devere siparişi ${out.data.orderNo} açıldı${d ? ` · iplik sevki ${d.dispatchNo} (${qtyText(d.yarnTotalKg)} kg)` : ""}`;
+  return {
+    status: out.replayed ? 200 : 201,
+    body: { success: true, data: { ...out.data, initialDispatch: d }, message: out.replayed ? `${out.data.orderNo} zaten kayıtlı` : opened, ...(out.warnings.length > 0 ? { warnings: out.warnings } : {}) },
+  };
 }));
 
 /**
@@ -319,19 +347,9 @@ router.post("/:id/cancel", requirePermission("warping-order:cancel"), wrap(async
 }));
 
 // ── D4b: iplik sevki · sevk iptali · çözgü talimatı ─────────────────────────
-/** Devere H1: koli / bobin adedi — BİLGİ (defter değil, kg tek kaynak); boş = girilmedi. */
-const PieceCount = (ad: string) => z.number({ message: `${ad} sayı olmalı` }).int(`${ad} tam sayı olmalı`).positive(`${ad} sıfırdan büyük olmalı`).max(100_000, `${ad} çok büyük`).nullable().optional();
-const DispatchLine = z.strictObject({
-  yarnItemId: Id,
-  warehouseId: Id,
-  lotId: Id.nullable().optional(),
-  qtyKg: z.number({ message: "İplik kg sayı olmalı" }).positive("İplik kg sıfırdan büyük olmalı").max(1_000_000, "İplik kg çok büyük"),
-  packageCount: PieceCount("Koli adedi"),
-  bobbinCount: PieceCount("Bobin adedi"),
-});
 const DispatchBody = z.strictObject({
   clientToken: z.uuid("clientToken geçersiz (UUID)"),
-  lines: z.array(DispatchLine).min(1, "En az bir iplik satırı gerekli").max(WARPING_DISPATCH_MAX_LINES, `En çok ${WARPING_DISPATCH_MAX_LINES} iplik satırı`),
+  lines: DispatchLines,
   plateNumber: z.string().max(32, "Plaka en çok 32 karakter").nullable().optional(),
   driverName: z.string().max(100, "Şoför adı en çok 100 karakter").nullable().optional(),
   notes: z.string().max(500, "Not en çok 500 karakter").nullable().optional(),

@@ -38,6 +38,15 @@ describe("WarpEndsStrip", () => {
     expect(legend).toMatch(/CNaylon/);
   });
 
+  it("tek iplik + not yok: 'girilmemiş' değil 'Çözgü raporu A · 6.000 tel' der", () => {
+    const { rerender } = render(<WarpEndsStrip yarns={[{ label: "PES 150", endsCount: 6000 }]} endsSequence={null} />);
+    expect(screen.getByTestId("warp-ends-single").textContent).toMatch(/Çözgü raporu A · 6\.?000 tel/);
+    expect(screen.queryByTestId("warp-ends-fallback")).toBeNull();
+    rerender(<WarpEndsStrip yarns={[{ label: "PES 150", endsCount: 6000 }]} endsSequence={null} sequenceNote="2A 1Q" />);
+    expect(screen.queryByTestId("warp-ends-single")).toBeNull();
+    expect(screen.getByTestId("warp-ends-fallback").textContent).toContain("okunamadı");
+  });
+
   it("açılım yok: oransal blok; not girilmemiş / okunamadı / düzenleniyor ayrı yazılır", () => {
     const { rerender } = render(<WarpEndsStrip yarns={yarns} endsSequence={null} />);
     expect(screen.getByTestId("warp-ends-proportional")).toBeTruthy();
