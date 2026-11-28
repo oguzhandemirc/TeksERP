@@ -15,6 +15,7 @@ import { previewWarpingReceive, receiveWarpingOrder, WARPING_RECEIVE_MAX_BEAMS }
 import { cancelWarpingReceipt, previewCancelWarpingReceipt } from "../services/warping-order/receive-cancel";
 import { listWarpingReceipts } from "../services/warping-order/receipts";
 import { qtyText } from "../services/helpers/qty-text.helper";
+import { listReceiveBodyOptions } from "../services/beam-body/at-warper";
 import { DeliveryNoteNo, ReceiveBeamLine } from "./warping-receive.schemas";
 import "../types/express-augment";
 
@@ -68,6 +69,27 @@ const TabletContextQuery = z.strictObject({ subcontractorId: Id.optional() });
 router.get("/tablet-context", requireAnyPermission("warping-order:read", ...MOBILE_DEVERE_KABUL), wrap(async (req) => {
   const q = parse(TabletContextQuery, req.query);
   return { status: 200, body: { success: true, data: await getWarpingTabletContext({ subcontractorId: q.subcontractorId ?? null }) } };
+}));
+
+/**
+ * @openapi
+ * /api/warping-orders/{id}/receive-body-options:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Kabul satırı gövde seçicisi (D3) — deverecide duran boş gövdeler (bu siparişle gidenler önce) + bu siparişle gidenlerin listesi
+ *     description: >
+ *       Seçim opsiyoneldir (ayar REQUIRED değilse); gönderilenden farklı gövde kabul edilir, istemci "farklı gövde" işaretini
+ *       `sent` kümesinden koyar. Gövde takibi kapalıysa 403 BEAM_BODY_MODE_OFF.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: { subcontractorId, sent[], options[] } }" }
+ *       403: { description: "MODULE_DISABLED · BEAM_BODY_MODE_OFF · yetki yok" }
+ *       404: { description: WARPING_ORDER_NOT_FOUND }
+ */
+router.get("/:id/receive-body-options", requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_KABUL), wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  return { status: 200, body: { success: true, data: await listReceiveBodyOptions(id) } };
 }));
 
 /**

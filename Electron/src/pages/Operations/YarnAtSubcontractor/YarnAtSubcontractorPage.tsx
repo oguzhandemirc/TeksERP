@@ -9,7 +9,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { FileText } from "lucide-react";
+import { Cylinder, FileText } from "lucide-react";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
+import { BEAM_BODIES_PATH } from "@/pages/BeamBodies/service";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
@@ -22,7 +24,7 @@ import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
 import { splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
 import { useListSearch } from "@/hooks/useListSearch";
 import { useLocalTable } from "@/hooks/useLocalTable";
-import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereBeamBodyMode, useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { itemService } from "@/pages/Items/service";
@@ -74,6 +76,9 @@ export function YarnAtSubcontractorPage() {
   const showOwner = useEmanetEnabled();
   const showValue = hasPermission("goods-receipt:read");
   const canWrite = hasPermission("warping-order:write");
+  // D3: iplikle giden boş gövdeler ayrı ekranda (Levent Gövdeleri › Devereci elinde); takip kapalıysa düğme yok.
+  const showBodies = useDevereBeamBodyMode() !== "OFF" && hasPermission("beam-body:read");
+  const openTarget = useOpenTarget();
   const [action, setAction] = useState<RowActionTarget | null>(null);
   const [statement, setStatement] = useState(false);
   const rows = useMemo(() => q.data ?? [], [q.data]);
@@ -93,6 +98,9 @@ export function YarnAtSubcontractorPage() {
         description="Devere için fasoncuya gönderilen ve henüz dönmemiş iplik: hangi fasoncuda, hangi iplikten, hangi lot ve siparişle, kaç gündür. Devreden = siparişi kapanmış ama fasoncuda kalmış iplik."
         actions={
           <>
+            {showBodies && (
+              <Button variant="outline" size="sm" onClick={() => openTarget(`${BEAM_BODIES_PATH}?tab=at-warpers`)}><Cylinder className="mr-1 h-4 w-4" /> Deverecideki gövdeler</Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setStatement(true)}><FileText className="mr-1 h-4 w-4" /> Fasoncu ekstresi</Button>
             <RefreshButton queryKey={YARN_AT_SUB_QUERY_KEY} />
           </>
