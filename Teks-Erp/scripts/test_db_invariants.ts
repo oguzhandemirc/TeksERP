@@ -1175,6 +1175,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "weave_designs", name: "weave_designs_leno_frames_range_chk" },
   // Seyitoğlu dilim C (…_desen_karti_kenar_cerceve) — kenar çerçeve no 1..32 + döner ile kesişmez
   { table: "weave_designs", name: "weave_designs_selvedge_frames_range_chk" },
+  // T1 tahar planı (…_tahar_plani) — çerçeve sayısı 1..16; dizi 1..512 tel ve her no ≤ çerçeve sayısı; kenar dizisi ≤ çerçeve sayısı
+  { table: "drawing_in_plans", name: "drawing_in_plans_frame_count_chk" },
+  { table: "drawing_in_plans", name: "drawing_in_plans_threading_chk" },
+  { table: "drawing_in_plans", name: "drawing_in_plans_selvedge_threading_chk" },
   { table: "weave_designs", name: "weave_designs_selvedge_leno_disjoint_chk" },
   { table: "item_warp_layers", name: "item_warp_layers_sort_ck" },
   { table: "product_recipe_weft_yarns", name: "product_recipe_weft_yarns_sort_ck" },
