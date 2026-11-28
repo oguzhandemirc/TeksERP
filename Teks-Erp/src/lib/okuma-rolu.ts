@@ -45,7 +45,7 @@ export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
   "key", "keyValue", "lastErrorCode", "mustChangePassword", "ourBatchNoKey", "pairKey", "paramsDigest", "payloadDigest", "pendingKey",
   "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rateCode", "rawCode", "rawKey", "rawStopCode",
   "reasonCode", "reportKey", "routeKey", "rowKeys", "sampleCode", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
-  "secretIssuedAt", "sequenceCode", "seriesKey", "setKey", "shadeCode", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "supplierItemCode", "textDigest", "toReasonCode", "toWarpingOrderId",
+  "secretIssuedAt", "sequenceCode", "seriesKey", "setKey", "shadeCode", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "supplierItemCode", "textDigest", "threadingKey", "toReasonCode", "toWarpingOrderId",
   "tokenVersion", "totpEnabledAt", "totpLastStep", "variantCode", "directWarpingOrderId", "warpingOrderId", "warpingReceiptKey", "warpingReceiveDocId", "webTotpOptOut",
 ];
 

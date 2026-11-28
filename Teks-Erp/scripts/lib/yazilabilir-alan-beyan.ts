@@ -7,6 +7,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   customer: ["address", "city", "code", "contactName", "contactPhone", "country", "createdById", "defaultDestination", "district", "documentProfileId", "email", "exportCode", "isActive", "isCustomerRole", "isSubcontractorRole", "isSupplierRole", "labelWidthSource", "mergedAt", "mergedById", "mergedIntoId", "name", "notes", "tamburLabelBatchEnabled", "tamburSplitLengthM", "tamburWeighRequired", "taxNumber", "type", "updatedById"],
   customerBranch: ["address", "city", "code", "contactName", "contactPhone", "createdById", "customerId", "defaultDestination", "district", "isActive", "name", "notes", "updatedById"],
   defectType: ["code", "createdById", "defectGroup", "description", "fixedPoints", "isActive", "isDefault", "name", "severity", "sortOrder", "updatedById"],
+  drawingInPlan: ["code", "createdById", "frameCount", "isActive", "name", "notation", "notes", "selvedgeThreading", "threading", "threadingKey", "updatedById"],
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],
   fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "serviceItemId", "sortOrder", "updatedById", "valueType", "variantOfPropertyId"],
   fabricType: ["isActive", "name", "sortOrder"],
