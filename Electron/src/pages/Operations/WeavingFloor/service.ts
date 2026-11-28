@@ -90,6 +90,10 @@ export interface WireLoom {
   collectorSilentSince?: string | null;
   /** Tezgahta tabletten oturum açmış operatör (D5); oturum yoksa null; eski sunucuda yok. */
   operator?: { name: string; since: string } | null;
+  /** Çerçeve kapasitesi (T2); null = bilinmiyor; eski sunucuda yok. */
+  frameCount?: number | null;
+  /** Takılı tahar (T2); null = tahar yok; eski sunucuda yok (gösterilmez). */
+  drawingIn?: { planCode: string; planName: string; planFrameCount: number; source: string | null } | null;
   openStop: WireOpenStop | null;
   today: { potSec: number; aptSec: number; availabilityPct: number | null; stopCount: number; breakdown: WireBreakdownRow[] };
   targetUnitsPerMin: number | null;

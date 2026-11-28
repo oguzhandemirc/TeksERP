@@ -8,8 +8,12 @@
 //   §4 elle düzeltme: MANUAL + kim; aynı plan → changed=false; pasif plan 400; çerçeve yetmezse uyarı; null kaldırır
 //   §5 uyum okumaları: tezgâh kartı (aynı özetli kumaşlar) · ürün kartı (bu taharın takılı olduğu tezgâhlar)
 //   §6 çerçeve sayısı: middleware 1..16 tam sayı, DB CHECK 17'yi reddeder; genel gövde takılı taharı yazamaz
+//   §7 geri alma: MOUNT_CANCEL / koşum geri alma o işlemin değiştirdiği taharı geri koyar; arada elle ya da başka
+//      otomatik değişim varsa dokunmaz (claim: AUTO + aynı an)
+//   §8 Tezgâh Salonu DTO'su: takılı tahar kodu + çerçeve + kaynak; boşsa null
 // Negatif sonda (elle, geri alındı): `TAHAR_CHANGING_MOUNT`a TYING_IN eklenince §2a kırmızı; özet eşitliği
-// kontrolü kaldırılınca §3c kırmızı.
+// kontrolü kaldırılınca §3c kırmızı; geri yükleme claim'inden `mountedDrawingInAt` çıkarılınca §7e/§7f kırmızı
+// (2026-11-28; `AUTO` koşulu tek başına çıkarılınca yeşil kalır — elle düzeltme anı da değiştirir, koşul savunmadır).
 // Çalıştır: npx tsx scripts/test_tezgah_tahari.ts (yalnız test DB; global ayar yazar → hedefDbEngeli)
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -20,8 +24,9 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { createWarpBeam } from "../src/services/warp-beam.service";
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
-import { mountBeam } from "../src/services/warp-beam-mount.service";
-import { openMachineRun } from "../src/services/machine-run.service";
+import { cancelStatusEvent, mountBeam } from "../src/services/warp-beam-mount.service";
+import { openMachineRun, revokeMachineRun } from "../src/services/machine-run.service";
+import { getLoomFloor } from "../src/services/loom-floor.service";
 import { readMachineDrawingInFit, readMachinesForDrawingInPlan, setMountedDrawingInManual } from "../src/services/helpers/machine-drawing-in.helper";
 import { machinePlanFields } from "../src/middlewares/machine-plan-fields.middleware";
 import { machineService } from "../src/routes/station.routes";
@@ -37,7 +42,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const TAG = `TEST-THR2-${Date.now().toString(36).toUpperCase()}`;
 const KEYS = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_AUTO_CONSUME, SETTING_KEYS.PRODUCTION_ENABLED];
 const saved = new Map<string, unknown>();
-const made = { station: "", looms: [] as string[], items: [] as string[], specs: [] as string[], beams: [] as string[], weaving: [] as string[], plans: [] as string[] };
+const made = { station: "", looms: [] as string[], items: [] as string[], specs: [] as string[], beams: [] as string[], weaving: [] as string[], plans: [] as string[], salon: { D: "", E: "" } };
 const setSetting = (key: string, value: unknown) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
 
 function srcFiles(dir: string): string[] {
@@ -160,6 +165,61 @@ async function main(): Promise<void> {
   await machineService.update(f.C, { mountedDrawingInPlanId: f.P2.id, mountedDrawingInSource: "MANUAL", frameCount: 12 } as never, admin.id);
   const c6 = await prisma.machine.findUniqueOrThrow({ where: { id: f.C }, select: { frameCount: true, mountedDrawingInPlanId: true } });
   check("§6c ⭐ genel gövde frameCount'u yazar, takılı taharı SESSİZCE düşürür", c6.frameCount === 12 && c6.mountedDrawingInPlanId === f.P1.id, JSON.stringify(c6));
+
+  await geriAlma(f, admin.id);
+  await salon(f);
+}
+
+type Fx = Awaited<ReturnType<typeof fixtures>>;
+const mountedEvent = (beamId: string) => prisma.warpBeamEvent.findFirstOrThrow({ where: { beamId, kind: "MOUNTED" }, select: { id: true, drawingInPrevPlanId: true, drawingInPrevSource: true, drawingInSetAt: true } });
+
+/** §7 geri alma: takma/koşum geri alınınca o işlemin değiştirdiği tahar geri gelir; arada değişim varsa dokunulmaz. */
+async function geriAlma(f: Fx, userId: string): Promise<void> {
+  console.log("\n── §7 geri alma taharı geri yükler ──");
+  const D = (await prisma.machine.create({ data: { stationId: made.station, name: `${TAG}-D`, code: `${TAG}-D`.slice(0, 32), warpBeamSlots: 2, frameCount: 8 }, select: { id: true } })).id;
+  const E = (await prisma.machine.create({ data: { stationId: made.station, name: `${TAG}-E`, code: `${TAG}-E`.slice(0, 32), warpBeamSlots: 2 }, select: { id: true } })).id;
+  made.looms.push(D, E);
+  await setMountedDrawingInManual(D, f.P2.id, userId);
+  const b1 = await f.beamFor(f.X);
+  await mountBeam(b1, { machineId: D, position: 1, mountMethod: "DRAWING_IN" }, userId);
+  const ev1 = await mountedEvent(b1);
+  check("§7a MOUNTED satırı eski taharı taşır (P2 · MANUAL · an dolu)", ev1.drawingInPrevPlanId === f.P2.id && ev1.drawingInPrevSource === "MANUAL" && ev1.drawingInSetAt != null, JSON.stringify(ev1));
+  await cancelStatusEvent(b1, ev1.id, "test geri alma", userId);
+  const d1 = await mounted(D);
+  check("§7b ⭐ takma geri alınınca önceki tahar (P2, MANUAL) geri gelir", d1.mountedDrawingInPlanId === f.P2.id && d1.mountedDrawingInSource === "MANUAL", JSON.stringify(d1));
+
+  const b2 = await f.beamFor(f.X);
+  await mountBeam(b2, { machineId: D, position: 1, mountMethod: "DRAWING_IN" }, userId);
+  await setMountedDrawingInManual(D, f.P1b.id, userId);
+  await cancelStatusEvent(b2, (await mountedEvent(b2)).id, "test geri alma", userId);
+  const d2 = await mounted(D);
+  check("§7c ⭐ takmadan SONRA elle düzeltme varsa geri alma ezmez (P1B, MANUAL kalır)", d2.mountedDrawingInPlanId === f.P1b.id && d2.mountedDrawingInSource === "MANUAL", JSON.stringify(d2));
+
+  const r1 = (await openMachineRun({ machineId: E, productionLineNo: 1, itemId: f.X }, userId)).data;
+  await revokeMachineRun(r1.id, "test geri alma", userId);
+  const e1 = await mounted(E);
+  check("§7d ⭐ koşum geri alınınca tahar eski hâline (hiç yok) döner", e1.mountedDrawingInPlanId === null && e1.mountedDrawingInSource === null, JSON.stringify(e1));
+
+  const r2 = (await openMachineRun({ machineId: E, productionLineNo: 1, itemId: f.X }, userId)).data;
+  await prisma.machineRun.updateMany({ where: { id: r2.id }, data: { endedAt: new Date() } });
+  const r3 = (await openMachineRun({ machineId: E, productionLineNo: 1, itemId: f.Y }, userId)).data;
+  await revokeMachineRun(r2.id, "test geri alma", userId);
+  check("§7e ⭐ arada başka koşum taharı değiştirdiyse eski koşumun geri alınması dokunmaz (P2 kalır)", (await mounted(E)).mountedDrawingInPlanId === f.P2.id);
+  await revokeMachineRun(r3.id, "test geri alma", userId);
+  const e3 = await mounted(E);
+  check("§7f son koşum geri alınınca kendi önceki taharı (P1, AUTO) geri gelir", e3.mountedDrawingInPlanId === f.P1.id && e3.mountedDrawingInSource === "AUTO", JSON.stringify(e3));
+  const audits = await prisma.systemLog.count({ where: { tableName: "MACHINE", recordId: E, action: "UPDATE" } });
+  check("§7g geri yüklemeler audit izine düştü", audits >= 4, String(audits));
+  made.salon = { D, E };
+}
+
+/** §8 Tezgâh Salonu DTO'su: takılı tahar kodu + çerçeve + kaynak; boşsa null. */
+async function salon(f: Fx): Promise<void> {
+  console.log("\n── §8 Tezgâh Salonu tahar bilgisi ──");
+  const looms = (await getLoomFloor()).data.looms;
+  const d = looms.find((l) => l.id === made.salon.D), b = looms.find((l) => l.id === f.B);
+  check("§8a ⭐ kartta tahar kodu, plan çerçevesi, kaynak ve tezgâh çerçevesi", d?.drawingIn?.planCode === `${TAG}-P1B`.slice(0, 32) && d.drawingIn.planFrameCount === 4 && d.drawingIn.source === "MANUAL" && d.frameCount === 8, JSON.stringify(d?.drawingIn));
+  check("§8b taharı olmayan tezgâhta drawingIn null", b !== undefined && b.drawingIn === null, JSON.stringify(b?.drawingIn));
 }
 
 async function cleanup(): Promise<void> {

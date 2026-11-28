@@ -78,6 +78,15 @@ export interface WeavingJob {
   producedM: number | null;
 }
 
+/** Tezgâhın takılı taharı (T2): kod + ad + plan çerçevesi; tezgâh çerçeve kapasitesi bilinmiyorsa null. */
+export interface DrawingInState {
+  code: string;
+  name: string;
+  frames: number;
+  loomFrames: number | null;
+  source: "AUTO" | "MANUAL" | null;
+}
+
 export interface BeamState {
   no: string;
   /** Tezgahtaki yuva (1..); bilinmiyorsa null. */
@@ -147,6 +156,8 @@ export interface LiveLoom {
   collectorSilentSince?: number | null;
   /** Tezgahta tabletten oturum açmış operatör (D5; `since` ms); oturum yok ya da eski sunucu/örnek veri → null/yok. */
   operator?: { name: string; since: number } | null;
+  /** Takılı tahar; null = tahar yok; eski sunucu/örnek veri → yok (hiç çizilmez). */
+  drawingIn?: DrawingInState | null;
   loomType: LoomType | null;
   /** Hedef devir (atkı/dk) — performansın paydası; ölçülmemişse null. */
   targetRpm: number | null;

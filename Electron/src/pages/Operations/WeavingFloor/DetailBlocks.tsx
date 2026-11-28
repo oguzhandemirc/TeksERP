@@ -4,7 +4,8 @@ import { StatusShape } from "./Markers";
 import { STATUS_COLOR, hsl } from "./palette";
 import { reasonIconOf } from "./stopReasons";
 import { availabilityPct, beamRatioOf, formatNumber, formatShortDuration, isBeamLow, performancePct, stopTotalsOf } from "./metrics";
-import type { BeamState, LiveLoom } from "./types";
+import { drawingInHintOf } from "./loomHints";
+import type { BeamState, DrawingInState, LiveLoom } from "./types";
 
 function Figure({ value, label, unit }: { value: string; label: string; unit?: string }) {
   return (
@@ -116,6 +117,25 @@ export function JobAndBeam({ loom: t }: { loom: LiveLoom }) {
       )}
       {t.beams.map((b) => (
         <BeamRow key={`${b.slot ?? ""}-${b.no}`} beam={b} />
+      ))}
+    </div>
+  );
+}
+
+/** Takılı tahar: kod + ad, çerçeve (tezgâh kapasitesiyle), kaynak; boşsa "Tahar yok". Metin ipucuyla aynı kaynaktan. */
+export function DrawingInBlock({ d }: { d: DrawingInState | null }) {
+  const h = drawingInHintOf(d);
+  if (!d) return <p data-testid="drawing-in-block" className="text-sm text-muted-foreground">Tahar yok.</p>;
+  return (
+    <div data-testid="drawing-in-block" className="space-y-1">
+      <div className="flex items-baseline gap-2">
+        <span className="font-semibold tabular-nums">{d.code}</span>
+        <span className="truncate text-sm text-muted-foreground">{d.name}</span>
+      </div>
+      {h.lines.map((l) => (
+        <div key={l.label} className={l.tone === "warn" ? "text-sm font-semibold text-amber-700 dark:text-amber-300" : "text-sm text-muted-foreground"}>
+          {l.label}: <span className="text-foreground">{l.value}</span>
+        </div>
       ))}
     </div>
   );

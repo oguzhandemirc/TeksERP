@@ -19,6 +19,22 @@ function lossClassOf(c: WireLossClass | null): LossClass | null {
 
 const ms = (iso: string): number => Date.parse(iso);
 
+/** Eski sunucu alanı göndermez → alan hiç kurulmaz (kartta "tahar yok" da çizilmez); null = tahar yok. */
+function drawingInOf(l: WireLoom): Pick<LiveLoom, "drawingIn"> {
+  if (l.drawingIn === undefined) return {};
+  if (l.drawingIn === null) return { drawingIn: null };
+  const s = l.drawingIn.source;
+  return {
+    drawingIn: {
+      code: l.drawingIn.planCode,
+      name: l.drawingIn.planName,
+      frames: l.drawingIn.planFrameCount,
+      loomFrames: l.frameCount ?? null,
+      source: s === "AUTO" || s === "MANUAL" ? s : null,
+    },
+  };
+}
+
 /** Gün kırılımı aynı sebebi levent ayrımıyla iki satıra bölebilir — sebep başına birleştirilir. */
 function dayBreakdownOf(l: WireLoom): StopTotal[] {
   const byCode = new Map<string, StopTotal>();
@@ -103,6 +119,7 @@ function loomOf(l: WireLoom, asOf: number): LiveLoom {
     stateSource: l.stateSource ?? null,
     collectorSilentSince: l.collectorSilentSince ? ms(l.collectorSilentSince) : null,
     operator: l.operator ? { name: l.operator.name, since: ms(l.operator.since) } : null,
+    ...drawingInOf(l),
     loomType: null,
     targetRpm: l.targetUnitsPerMin,
     rpm: null,

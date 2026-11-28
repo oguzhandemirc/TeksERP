@@ -1,7 +1,7 @@
 // Kart ipucunun içeriği: duruşun sebebi, türü (plan dışı mı), FABRİKA saatiyle başlangıcı, geçen
 // süre, hedef ve aşım, kaynak ve dokunan iş; çalışan/verisiz tezgah; levent ve zincir halkaları.
 import { describe, expect, it } from "vitest";
-import { beamHintOf, chainStepHintOf, hintText, loomHintOf } from "./loomHints";
+import { beamHintOf, chainStepHintOf, drawingInBadgeText, drawingInHintOf, hintText, loomHintOf } from "./loomHints";
 import type { LiveLoom, OpenStop } from "./types";
 
 const NOW = Date.parse("2026-10-10T08:30:00.000Z"); // fabrika (İstanbul) 11:30
@@ -93,5 +93,26 @@ describe("beamHintOf", () => {
     ]));
     expect(text).toContain("LV-1 (yuva 1): 900 m kaldı");
     expect(text).toContain("LV-2 (yuva 2): 40 m kaldı");
+  });
+});
+
+describe("drawingInHintOf", () => {
+  it("⭐ kod, ad, çerçeve / tezgâh kapasitesi, kaynak; kapasite aşılırsa uyarı tonu", () => {
+    const h = drawingInHintOf({ code: "TAH-8", name: "Saten 8", frames: 8, loomFrames: 6, source: "MANUAL" });
+    const text = hintText(h);
+    expect(text).toContain("Takılı tahar: TAH-8");
+    expect(text).toContain("Saten 8");
+    expect(text).toContain("Çerçeve: 8 / tezgâh 6");
+    expect(text).toContain("Kaynak: elle");
+    expect(h.lines[0]!.tone).toBe("warn");
+  });
+
+  it("kapasite bilinmiyorsa yalnız plan çerçevesi, tonsuz; otomatik kaynak; boşsa 'Tahar yok'", () => {
+    const h = drawingInHintOf({ code: "T", name: "D", frames: 4, loomFrames: null, source: "AUTO" });
+    expect(hintText(h)).toContain("Çerçeve: 4\n");
+    expect(hintText(h)).toContain("Kaynak: otomatik");
+    expect(h.lines[0]!.tone).toBeUndefined();
+    expect(drawingInHintOf(null).title).toBe("Tahar yok");
+    expect(drawingInBadgeText(null)).toBe("tahar yok");
   });
 });

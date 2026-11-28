@@ -32,7 +32,7 @@ import {
 } from "./helpers/warp-beam-mount.helper";
 import { closeToMeasuredTx, loadBeamTx, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { qtyText } from "./helpers/qty-text.helper";
-import { autoMountDrawingInTx, logDrawingInMountAudit } from "./helpers/machine-drawing-in.helper";
+import { autoMountDrawingInTx, drawingInRestoreColumns, logDrawingInMountAudit, revertDrawingInMountTx } from "./helpers/machine-drawing-in.helper";
 
 /** Taharı yeniden kuran bağlama yöntemleri (düğüm hariç). */
 const TAHAR_CHANGING_MOUNT: ReadonlySet<WarpBeamMountMethod> = new Set<WarpBeamMountMethod>(["DRAWING_IN", "HARNESS_CHANGE"]);
@@ -114,6 +114,11 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
     // Yöntem ÖNERİSİ (veri, zorlama değil): bu yuvadan son sökülen levent aynı çözgü kartıysa düğüm.
     const last = await tx.warpBeamEvent.findFirst({ where: { kind: "DISMOUNTED", machineId: machine.id, mountPosition: input.position, reversal: null }, orderBy: { createdAt: "desc" }, select: { beam: { select: { warpSpecId: true } } } });
     if (last && last.beam.warpSpecId === beam.warpSpecId && !input.mountMethod) warnings.push("Bu yuvadan son sökülen levent aynı çözgü kartından — düğüm (tying-in) yöntemi uygun olabilir; beyan sizin.");
+    // T2: yeni tahar/çerçeve değişimi beyanı tezgâhın takılı taharını işin kumaşına çeker; düğüm (TYING_IN) taharı korur.
+    // İleri satırdan ÖNCE koşar ki eski tahar MOUNTED satırına yazılsın (MOUNT_CANCEL geri yükler).
+    const drawingIn = input.mountMethod && TAHAR_CHANGING_MOUNT.has(input.mountMethod)
+      ? await autoMountDrawingInTx(tx, { machineId: machine.id, itemId: link?.weavingOrder?.itemId, userId, reason: `levent takma (${beam.beamNo})` })
+      : null;
     let ev;
     try {
       ev = await applyWarpBeamEventTx(tx, {
@@ -132,15 +137,12 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
           setupMinutes: input.setupMinutes ?? null,
           machineCounter: input.machineCounter == null ? null : new Prisma.Decimal(input.machineCounter),
           createdById: userId ?? null,
+          ...drawingInRestoreColumns(drawingIn),
         },
       });
     } catch (e) {
       slotRaceTo409(e, machine.code, input.position);
     }
-    // T2: yeni tahar/çerçeve değişimi beyanı tezgâhın takılı taharını işin kumaşına çeker; düğüm (TYING_IN) taharı korur.
-    const drawingIn = input.mountMethod && TAHAR_CHANGING_MOUNT.has(input.mountMethod)
-      ? await autoMountDrawingInTx(tx, { machineId: machine.id, itemId: link?.weavingOrder?.itemId, userId, reason: `levent takma (${beam.beamNo})` })
-      : null;
     return { ev, machine, beamNo: beam.beamNo, drawingIn };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "MOUNTED", data: { beamId: id, machineId: result.machine.id, position: input.position, mountMethod: input.mountMethod ?? null } });
@@ -222,9 +224,14 @@ export async function cancelStatusEvent(id: string, eventId: string, reason: str
     } catch (e) {
       slotRaceTo409(e, "makine", active.mountPosition ?? 0);
     }
-    return { ev, beamNo: beam.beamNo, cancelKind, backTo };
+    // Takmayı geri almak, o takmanın değiştirdiği taharı da geri koyar (arada elle/başka değişim varsa dokunmaz).
+    const drawingIn = kind === "MOUNTED"
+      ? await revertDrawingInMountTx(tx, { machineId: active.machineId, prevPlanId: active.drawingInPrevPlanId, prevSource: active.drawingInPrevSource, setAt: active.drawingInSetAt, userId, reason: `levent takma geri alındı (${beam.beamNo})` })
+      : null;
+    return { ev, beamNo: beam.beamNo, cancelKind, backTo, drawingIn };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: result.cancelKind, data: { beamId: id, reversesEventId: eventId, reason: why } });
+  await logDrawingInMountAudit(result.drawingIn, userId);
   return { success: true, data: await freshDto(id), message: `${result.beamNo}: ${result.cancelKind} — durum ${result.backTo}` };
 }
 

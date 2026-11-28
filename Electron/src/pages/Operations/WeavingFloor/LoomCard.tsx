@@ -7,11 +7,11 @@ import { cn } from "@/lib/utils";
 import { FloorHint, FocusHint } from "./FloorHint";
 import { AlertChainMini, StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
-import { STAR_HINT, TODAY_PCT_HINT, beamHintOf, loomHintOf, silentCollectorHintOf, sourceHintOf, type HintModel } from "./loomHints";
+import { STAR_HINT, TODAY_PCT_HINT, beamHintOf, drawingInBadgeText, drawingInHintOf, loomHintOf, silentCollectorHintOf, sourceHintOf, type HintModel } from "./loomHints";
 import { STATE_SOURCE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf, type StatusKey } from "./palette";
 import { criticalBeamOf, escalationTierOf, figureBeamRatio, formatNumber, formatTimer, isBeamLow, targetProgress, todayAvailabilityPct, type EscalationTier } from "./metrics";
 import { reasonIconOf } from "./stopReasons";
-import type { BeamState, LiveLoom, OpenStop, StateSource } from "./types";
+import type { BeamState, DrawingInState, LiveLoom, OpenStop, StateSource } from "./types";
 
 interface Props {
   loom: LiveLoom;
@@ -72,6 +72,21 @@ function BeamBadge({ beams }: { beams: BeamState[] }) {
       >
         <Cylinder className="h-3 w-3 shrink-0" aria-hidden />
         {formatNumber(b.remainingM)} m{beams.length > 1 && <small className="ml-0.5 font-medium">+{beams.length - 1}</small>}
+      </span>
+    </FloorHint>
+  );
+}
+
+/** Takılı tahar başlıkta küçük rozet (kod · çerçeve); boşsa soluk "tahar yok"; ayrıntı ipucunda. */
+function DrawingInTag({ d }: { d: DrawingInState | null }) {
+  return (
+    <FloorHint hint={drawingInHintOf(d)}>
+      <span
+        data-testid="drawing-in-tag"
+        className={cn("max-w-[55%] shrink truncate rounded-md px-1 text-[0.65em] font-semibold leading-tight tabular-nums", d ? "text-foreground/70" : "text-muted-foreground/60")}
+        style={{ background: hsl("var(--ds-ink)", 0.06) }}
+      >
+        {drawingInBadgeText(d)}
       </span>
     </FloorHint>
   );
@@ -150,17 +165,18 @@ function sourceText(t: LiveLoom): string {
   return t.stateSource && t.stateSource !== "cikarim" ? ` (${STATE_SOURCE_LABEL[t.stateSource].toLowerCase()})` : "";
 }
 
-function beamText(t: LiveLoom): string {
+function beamAndDrawingInText(t: LiveLoom): string {
   const b = criticalBeamOf(t.beams);
-  return b ? `, levent ${b.no} ${formatNumber(b.remainingM)} m kaldı` : "";
+  const tahar = t.drawingIn === undefined ? "" : `, ${t.drawingIn ? `tahar ${t.drawingIn.code}` : "tahar yok"}`;
+  return (b ? `, levent ${b.no} ${formatNumber(b.remainingM)} m kaldı` : "") + tahar;
 }
 
 function ariaLabelOf(t: LiveLoom, now: number): string {
-  if (!t.monitored) return `Tezgah ${t.code}, veri yok${beamText(t)}`;
+  if (!t.monitored) return `Tezgah ${t.code}, veri yok${beamAndDrawingInText(t)}`;
   const today = todayAvailabilityPct(t);
   const todayText = today === null ? "" : `, bugün %${today}`;
-  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${sourceText(t)}${silentText(t)}${todayText}${beamText(t)}`;
-  return `Tezgah ${t.code}, duruyor${sourceText(t)}${silentText(t)}: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamText(t)}`;
+  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${sourceText(t)}${silentText(t)}${todayText}${beamAndDrawingInText(t)}`;
+  return `Tezgah ${t.code}, duruyor${sourceText(t)}${silentText(t)}: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamAndDrawingInText(t)}`;
 }
 
 /** Ad sığmazsa önce küçülür (boyut kabı), yine sığmazsa kırpılır; tam ad ipucunda. */
@@ -193,6 +209,7 @@ function CardHeader({ t, stop, tier, status, star, hint, now }: HeaderProps) {
           </span>
         </FloorHint>
       </span>
+      {t.drawingIn !== undefined && <DrawingInTag d={t.drawingIn} />}
       {star && (
         <FloorHint hint={STAR_HINT}>
           <span className="shrink-0">
