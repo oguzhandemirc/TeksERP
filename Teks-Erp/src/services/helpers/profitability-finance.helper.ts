@@ -8,6 +8,7 @@
 import { Currency, InvoiceLineType, InvoiceStatus, InvoiceType, Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { resolveExchangeRateTx } from "./finance.helper";
+import { invoiceNetExVat } from "./invoice-net.helper";
 
 export interface RevenueLinkRow {
   id: string;
@@ -134,6 +135,8 @@ export interface ProductRevenueInvoiceRow {
   shipmentId: string | null;
   /** Ürün kartı → ÜRÜN satırı net tutarları toplamı (belge para birimi; KDV/tevkifat hariç; hizmet geliriyle aynı tanım). */
   lineTotalByItem: Map<string, Prisma.Decimal>;
+  /** Ürün kartı → ÜRÜN satırı miktarı toplamı (emanet metresi satıra girmiş mi sorusu için). */
+  qtyByItem: Map<string, Prisma.Decimal>;
 }
 
 /**
@@ -154,16 +157,20 @@ export async function readProductRevenueInvoices(start: Date, end: Date): Promis
     select: {
       id: true, docNo: true, status: true, exchangeRate: true, issueDate: true, confirmedAt: true, cancelledAt: true, shipmentId: true,
       cari: { select: { customerId: true } },
-      lines: { where: productLine, select: { itemId: true, lineTotal: true } },
+      lines: { where: productLine, select: { itemId: true, lineTotal: true, qty: true } },
     },
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
   });
   return rows.map((r) => {
     const lineTotalByItem = new Map<string, Prisma.Decimal>();
-    for (const l of r.lines) lineTotalByItem.set(l.itemId!, (lineTotalByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
+    const qtyByItem = new Map<string, Prisma.Decimal>();
+    for (const l of r.lines) {
+      lineTotalByItem.set(l.itemId!, (lineTotalByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
+      qtyByItem.set(l.itemId!, (qtyByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.qty));
+    }
     return {
       id: r.id, docNo: r.docNo, status: r.status, exchangeRate: r.exchangeRate, issueDate: r.issueDate, confirmedAt: r.confirmedAt,
-      cancelledAt: r.cancelledAt, cariCustomerId: r.cari.customerId, shipmentId: r.shipmentId, lineTotalByItem,
+      cancelledAt: r.cancelledAt, cariCustomerId: r.cari.customerId, shipmentId: r.shipmentId, lineTotalByItem, qtyByItem,
     };
   });
 }
@@ -179,17 +186,17 @@ export async function readConsumablePurchaseLines(itemIds: string[]): Promise<Ar
   return rows.map((r) => ({ itemId: r.itemId!, issueDate: r.invoice.issueDate, unitTry: r.lineTotal.div(r.qty).mul(r.invoice.exchangeRate) }));
 }
 
-/** Fason makbuzlarının ONAYLI alış (fason) faturası tutarı, TL (KDV hariç net satır toplamı × belge kuru). */
+/** Fason makbuzlarının ONAYLI alış (fason) faturası tutarı, TL (KDV hariç net — tek okuyucu `invoiceNetExVat` — × belge kuru). */
 export async function readSubcontractInvoiceTotals(receiptIds: string[]): Promise<Map<string, Prisma.Decimal>> {
   const out = new Map<string, Prisma.Decimal>();
   if (receiptIds.length === 0) return out;
   const rows = await prisma.invoice.findMany({
     where: { subcontractorReceiptId: { in: receiptIds }, type: InvoiceType.PURCHASE, status: InvoiceStatus.CONFIRMED },
-    select: { subcontractorReceiptId: true, exchangeRate: true, lines: { select: { lineTotal: true } } },
+    select: { subcontractorReceiptId: true, exchangeRate: true, subtotal: true },
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
   });
   for (const r of rows) {
-    const net = r.lines.reduce((a, l) => a.plus(l.lineTotal), new Prisma.Decimal(0)).mul(r.exchangeRate);
+    const net = invoiceNetExVat(r).mul(r.exchangeRate);
     out.set(r.subcontractorReceiptId!, (out.get(r.subcontractorReceiptId!) ?? new Prisma.Decimal(0)).plus(net));
   }
   return out;

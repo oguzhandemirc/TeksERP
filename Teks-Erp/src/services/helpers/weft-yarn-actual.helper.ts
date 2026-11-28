@@ -2,9 +2,10 @@
 // ATKI İPLİĞİ GERÇEK MALİYETİ — TOP PAYI (devere maliyet K7; plan PLAN-devere-maliyet-1126 §3 dilim 3)
 // =============================================================================
 // Atkının topa/lota tüketim defteri YOK (atkı tartılmaz): miktar standart sürümün atkı satırı normudur (kg/m × top
-// metresi, "norm miktar"); yalnız FİYAT gerçeğe çekilir. Fiyat sırası topun doğduğu an: o ana kadar son giren lotun
-// fiyatı (lot okuması `warp-yarn-lot-price.helper`, köprüden) → o tarihte geçerli `YarnCostPrice` (aynı birim;
-// "tahmini") → eksik `ATKI_FIYATI`. Son giren lot müşteri malıysa bilgi `MUSTERI_IPLIGI` (0 katkı, eksik değil).
+// metresi, "norm miktar"); yalnız FİYAT gerçeğe çekilir. Fiyat sırası topun doğduğu an: o ana kadar son giren BİZİM
+// (sahipsiz) lotun fiyatı (lot okuması `warp-yarn-lot-price.helper`, köprüden) → o tarihte geçerli `YarnCostPrice`
+// (aynı birim; "tahmini") → eksik `ATKI_FIYATI`. O ana kadar işin müşterisinin (sipariş müşterisi ya da topun sahibi)
+// lotu girmişse bilgi `MUSTERI_IPLIGI` (0 katkı, eksik değil); başka sahibin lotu ne fiyatı ne sahipliği belirler.
 // Saklanmaz; bilinmeyen 0 DEĞİL null.
 // =============================================================================
 import { Prisma, YarnPurchaseUnit, type Currency } from "@prisma/client";
@@ -45,10 +46,12 @@ type CardPrice = { yarnItemId: string; unit: YarnPurchaseUnit; currency: Currenc
 /** Satır fiyatı (TL/birim) ya da bilgi/eksik kodu; lot fiyatı yalnız kg satırında anlamlıdır. */
 type PriceData = { receipts: YarnReceiptLot[]; lotPrices: Map<string, LotPriceRead>; cards: CardPrice[]; ctx: WeftYarnActualCtx };
 async function linePrice(
-  line: WeftNormLine, at: Date, { receipts, lotPrices, cards, ctx }: PriceData,
+  line: WeftNormLine, at: Date, jobOwners: ReadonlySet<string>, { receipts, lotPrices, cards, ctx }: PriceData,
 ): Promise<{ perUnit: Dec; source: WeftYarnCostSource } | { code: WeftYarnCostMissing }> {
-  const last = receipts.find((r) => r.yarnItemId === line.yarnItemId && r.at.getTime() <= at.getTime());
-  if (last?.ownerCustomerId) return { code: "MUSTERI_IPLIGI" };
+  const upTo = (r: YarnReceiptLot) => r.yarnItemId === line.yarnItemId && r.at.getTime() <= at.getTime();
+  // Sahiplik yalnız işin müşterisiyle eşleşince müşteri ipliğidir; kendi işimizde sahipli lot fiyatımızı ezmez.
+  if (receipts.some((r) => upTo(r) && r.ownerCustomerId !== null && jobOwners.has(r.ownerCustomerId))) return { code: "MUSTERI_IPLIGI" };
+  const last = receipts.find((r) => upTo(r) && r.ownerCustomerId === null);
   const unit = UNIT_OF[line.qtyUnit ?? "kg"] ?? null;
   const lot = last && unit === YarnPurchaseUnit.KG ? lotPrices.get(last.lotId) : undefined;
   if (lot?.priceTry) return { perUnit: lot.priceTry, source: "LOT" };
@@ -60,14 +63,17 @@ async function linePrice(
   return { code: card || lot?.fxMissing ? "FX_RATE_MISSING" : "ATKI_FIYATI" };
 }
 
+/** Atkı payı istenen top: norm satırları + işin müşterileri (dokuma işinin sipariş müşterileri). */
+export interface WeftRollInput { rollId: string; lines: WeftNormLine[]; jobCustomerIds: readonly string[] }
+
 /** Topların atkı ipliği payı (norm miktar × gerçek fiyat). Haritada yalnız norm satırı verilen top bulunur. */
 export async function loadRollWeftYarnCostsTx(
-  db: Db, rolls: Array<{ rollId: string; lines: WeftNormLine[] }>, ctx: WeftYarnActualCtx,
+  db: Db, rolls: WeftRollInput[], ctx: WeftYarnActualCtx,
 ): Promise<Map<string, RollWeftYarnCost>> {
   const out = new Map<string, RollWeftYarnCost>();
   const priced = rolls.filter((r) => r.lines.length > 0);
   if (priced.length === 0) return out;
-  const rows = await db.roll.findMany({ where: { id: { in: priced.map((r) => r.rollId) } }, select: { id: true, initialQty: true, createdAt: true } });
+  const rows = await db.roll.findMany({ where: { id: { in: priced.map((r) => r.rollId) } }, select: { id: true, initialQty: true, createdAt: true, ownerCustomerId: true } });
   const rollOf = new Map(rows.map((r) => [r.id, r]));
   const yarnIds = [...new Set(priced.flatMap((r) => r.lines.map((l) => l.yarnItemId)))].sort();
   const until = new Date(Math.max(...rows.map((r) => r.createdAt.getTime())));
@@ -83,8 +89,10 @@ export async function loadRollWeftYarnCostsTx(
     const roll = rollOf.get(r.rollId);
     if (!roll) continue;
     const acc: RollWeftYarnCost = { costTry: D0(), estimatedTry: D0(), sources: [], missing: [] };
+    // İşin sahibi: siparişin müşterisi; siparişsiz işte topun sahibi (emanet doğum niteliği).
+    const jobOwners = new Set([...r.jobCustomerIds, ...(roll.ownerCustomerId ? [roll.ownerCustomerId] : [])]);
     for (const line of r.lines) {
-      const p = await linePrice(line, roll.createdAt, data);
+      const p = await linePrice(line, roll.createdAt, jobOwners, data);
       if ("code" in p) {
         // Müşteri malı iplik toplamı bozmaz (0 katkı); diğer kodlar bilinmeyendir.
         if (p.code !== "MUSTERI_IPLIGI") acc.costTry = null;

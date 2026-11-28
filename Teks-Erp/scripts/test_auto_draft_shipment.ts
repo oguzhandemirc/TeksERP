@@ -46,6 +46,9 @@
 //      malzeme kuralından gelir (US ⇒ tevkifat 0; panel nedeni aynı İE ile sorar); iki İE'li sevkte alan yok, bugünkü.
 //      NEGATİF SONDA (2026-11-26, ölçüldü): `soleWorkOrderOfRolls` hep null dönünce 51/0 yerine 48/3
 //      (❌ §11b · §11c [50,50] · §11d; §11a/§11e zemin yeşil kalır — doğru); geri alındı.
+//      İnceleme B1 (§11f/§11g): US İE topu İE'siz ya da emanet topla aynı sevkte → alan yok, tevkifat bugünkü.
+//      NEGATİF SONDA (2026-11-26, ölçüldü): "bütün toplar o İE'de" sayımı + emanet süzgeci kaldırılınca 53/0 yerine
+//      51/2 (❌ §11f · §11g); yalnız emanet süzgeci kaldırılınca 52/1 (❌ §11g); geri alındı.
 //
 // NEGATİF SONDA (2026-08-14 — koşuldu, kırmızı GÖRÜLDÜ, dosya shasum ile
 // birebir geri yüklendi: dc724ae3…). `shipping.service.
@@ -563,6 +566,20 @@ async function main(): Promise<void> {
     check("§11c ⭐ tek İE (US) sevk: satırlar tevkifatsız (malzeme kuralı; panel nedeni İE ile sorar)", us.lines.length === 2 && us.lines.every((l) => !l.withholdingRate), JSON.stringify(us.lines.map((l) => l.withholdingRate)));
     check("§11d tek İE (CUSTOMER) sevk: workOrderId döner, vergi bugünkü", cu.workOrderId === woCu);
     check("§11e iki İE'li sevk: alan YOK (karışıkta kural uydurulmaz), tevkifat bugünkü 50", !("workOrderId" in mix) && mix.lines.every((l) => l.withholdingRate === 50), JSON.stringify({ wo: mix.workOrderId, w: mix.lines.map((l) => l.withholdingRate) }));
+    // İnceleme B1: US İE'nin topu İE'siz ya da emanet topla aynı sevkte → "tek İE" değil (karışık sevk).
+    const f1 = await makeRoll(itemA.id, 10, wh.id);
+    const fBare = await makeRoll(itemA.id, 40, wh.id);
+    await prisma.roll.updateMany({ where: { id: f1 }, data: { batchId: batchIds[0]! } });
+    const bareShip = await quickShip([f1, fBare], customer.id);
+    const bare = await collectShipmentInvoiceDraftLines(bareShip.data.id, customer.id, Currency.TRY);
+    check("§11f ⭐ US İE topu + İE'siz top: alan YOK, tevkifat bugünkü 50 (İE'siz top sayımdan kaçmaz)", !("workOrderId" in bare) && bare.lines.length > 0 && bare.lines.every((l) => l.withholdingRate === 50), JSON.stringify({ wo: bare.workOrderId, w: bare.lines.map((l) => l.withholdingRate) }));
+    const g1 = await makeRoll(itemA.id, 10, wh.id);
+    const gOwn = await makeRoll(itemB.id, 15, wh.id);
+    await prisma.roll.updateMany({ where: { id: { in: [g1, gOwn] } }, data: { batchId: batchIds[0]! } });
+    await prisma.roll.updateMany({ where: { id: gOwn }, data: { ownerCustomerId: customer.id } });
+    const ownShip = await quickShip([g1, gOwn], customer.id);
+    const own = await collectShipmentInvoiceDraftLines(ownShip.data.id, customer.id, Currency.TRY);
+    check("§11g ⭐ US İE'de emanet top: alan YOK (müşteri malı = ana hammadde bizden değil), tevkifat bugünkü 50", !("workOrderId" in own) && own.lines.length > 0 && own.lines.every((l) => l.withholdingRate === 50), JSON.stringify({ wo: own.workOrderId, w: own.lines.map((l) => l.withholdingRate) }));
   }
 
   // ── §6 KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────

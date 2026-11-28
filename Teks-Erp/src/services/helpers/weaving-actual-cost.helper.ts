@@ -159,9 +159,11 @@ type WeftFields = Pick<WeavingActualCost,
   "weftYarnCostTry" | "weftYarnPerMTry" | "weftYarnCoveredMeters" | "weftYarnSource" | "weftYarnEstimatedTry" | "weftYarnMissing">;
 
 /** İş başına atkı ipliği alanları: sürümün atkı satırı normu × her canlı topun metresi; normsuz iş `ATKI_NORMU` (0 değil). */
-async function weftFieldsFor(db: Db, liveRolls: LiveRolls, linesOf: (id: string) => WeftLine[] | null): Promise<(id: string) => WeftFields> {
+async function weftFieldsFor(
+  db: Db, liveRolls: LiveRolls, linesOf: (id: string) => WeftLine[] | null, customersOf: (id: string) => string[],
+): Promise<(id: string) => WeftFields> {
   const normOf = (id: string) => (linesOf(id) ?? []).flatMap((l) => (l.component === "WEFT_YARN" && l.yarnItemId && l.qty ? [{ yarnItemId: l.yarnItemId, qty: l.qty, qtyUnit: l.qtyUnit }] : []));
-  const input = [...liveRolls.entries()].flatMap(([id, rolls]) => rolls.map((r) => ({ rollId: r.id, lines: normOf(id) })));
+  const input = [...liveRolls.entries()].flatMap(([id, rolls]) => rolls.map((r) => ({ rollId: r.id, lines: normOf(id), jobCustomerIds: customersOf(id) })));
   const costs = await loadRollWeftYarnCosts(db, input);
   return (id) => {
     const rolls = liveRolls.get(id) ?? [];
@@ -280,6 +282,8 @@ export async function weavingActualCostTx(
     select: {
       id: true, weavingOrderNumber: true, itemId: true, recipeId: true, status: true, executionKind: true,
       item: { select: { code: true, name: true } },
+      // İşin müşterileri (atkıda müşteri ipliği yalnız lot sahibi bunlardan biriyse).
+      orderLineLinks: { select: { orderLine: { select: { order: { select: { customerId: true } } } } } },
       machineRuns: {
         where: { revokedAt: null },
         select: { machineId: true, startedAt: true, endedAt: true, producedM: true, stopSecAtClose: true, machine: { select: { code: true } } },
@@ -294,7 +298,11 @@ export async function weavingActualCostTx(
   const rates = await machineCostRateHistory(db, machineIds);
   const { versionOf, hasVariant } = await standardVersionsFor(db, orders);
   const byId = new Map(orders.map((o) => [o.id, o]));
-  const weftFor = await weftFieldsFor(db, liveRolls, (id) => { const o = byId.get(id); return o ? versionOf(o)?.lines ?? null : null; });
+  const weftFor = await weftFieldsFor(
+    db, liveRolls,
+    (id) => { const o = byId.get(id); return o ? versionOf(o)?.lines ?? null : null; },
+    (id) => [...new Set((byId.get(id)?.orderLineLinks ?? []).map((l) => l.orderLine.order.customerId))],
+  );
 
   return weavingOrderIds.flatMap((id) => {
     const o = byId.get(id);

@@ -130,16 +130,23 @@ async function rollSubcontracts(sold: ShipmentGrossRoll[], traces: Map<string, R
 }
 
 /** Faturanın ürün × dokuma işi kovaları: satılan topun gelir payı ve metresi köken payıyla işlere bölünür. */
-function bucketsOf(inv: ProductRevenueInvoiceRow, soldOf: (shipmentId: string, itemId: string) => ShipmentGrossRoll[], traces: Map<string, RollOriginTrace>, subs: Map<string, SubcontractShare>): Array<{ itemId: string; bucket: Bucket }> {
+type RollsOf = (shipmentId: string, itemId: string) => ShipmentGrossRoll[];
+function bucketsOf(inv: ProductRevenueInvoiceRow, { soldOf, consignedOf }: { soldOf: RollsOf; consignedOf: RollsOf }, traces: Map<string, RollOriginTrace>, subs: Map<string, SubcontractShare>): Array<{ itemId: string; bucket: Bucket }> {
   const out: Array<{ itemId: string; bucket: Bucket }> = [];
   for (const itemId of [...inv.lineTotalByItem.keys()].sort()) {
     const revenueTry = inv.lineTotalByItem.get(itemId)!.mul(inv.exchangeRate);
     const rolls = inv.shipmentId ? soldOf(inv.shipmentId, itemId) : [];
+    const consigned = inv.shipmentId ? consignedOf(inv.shipmentId, itemId) : [];
+    // Yalnız emanet taşıyan satır kumaş evrenine girmez (müşterinin malı satılmaz).
+    if (rolls.length === 0 && consigned.length > 0) continue;
     if (rolls.length === 0) {
       out.push({ itemId, bucket: { weavingOrderId: null, rollCount: 0, returnedRollCount: 0, meters: D0(), hamMeters: null, revenueTry, subcontractTry: null, subcontractEstimated: false, subMissing: new Set(), noShipment: true } });
       continue;
     }
-    const shares = shareByMeters(revenueTry, rolls.map((r) => r.currentQty));
+    // Satır miktarı kendi metremizi aşıyorsa emanet metresi de satıra yazılmış (hizmet faturası kapalı taslak): emanet payı düşer.
+    const ownM = rolls.reduce((a, r) => a.plus(r.currentQty), D0());
+    const pool = consigned.length > 0 && (inv.qtyByItem.get(itemId) ?? D0()).gt(ownM) ? [...rolls, ...consigned] : rolls;
+    const shares = shareByMeters(revenueTry, pool.map((r) => r.currentQty));
     const byKey = new Map<string, Bucket>();
     rolls.forEach((r, i) => {
       const origins = (traces.get(r.id) ?? NO_ORIGIN).origins;
@@ -251,11 +258,16 @@ export async function computeProductProfitability(ctx: {
 }): Promise<ProductProfitability> {
   const { start, end, monthOf } = ctx;
   const invoices = await ctx.readInvoices(start, end);
-  const sold = (await collectShipmentGrossRolls(invoices.flatMap((i) => (i.shipmentId ? [i.shipmentId] : [])))).filter((r) => !isConsignedRoll(r));
-  const soldIndex = new Map<string, ShipmentGrossRoll[]>();
-  for (const r of sold) soldIndex.set(`${r.shipmentId}|${r.itemId}`, [...(soldIndex.get(`${r.shipmentId}|${r.itemId}`) ?? []), r]);
-  for (const list of soldIndex.values()) list.sort((a, b) => a.id.localeCompare(b.id));
-  const soldOf = (shipmentId: string, itemId: string) => soldIndex.get(`${shipmentId}|${itemId}`) ?? [];
+  const gross = await collectShipmentGrossRolls(invoices.flatMap((i) => (i.shipmentId ? [i.shipmentId] : [])));
+  const sold = gross.filter((r) => !isConsignedRoll(r));
+  const indexOf = (list: ShipmentGrossRoll[]) => {
+    const idx = new Map<string, ShipmentGrossRoll[]>();
+    for (const r of list) idx.set(`${r.shipmentId}|${r.itemId}`, [...(idx.get(`${r.shipmentId}|${r.itemId}`) ?? []), r]);
+    for (const l of idx.values()) l.sort((a, b) => a.id.localeCompare(b.id));
+    return (shipmentId: string, itemId: string) => idx.get(`${shipmentId}|${itemId}`) ?? [];
+  };
+  const soldOf = indexOf(sold);
+  const consignedOf = indexOf(gross.filter((r) => isConsignedRoll(r)));
   const traces = await weavingOriginsOfRolls(prisma, [...new Set(sold.map((r) => r.id))].sort());
   const subs = await rollSubcontracts(sold, traces, ctx);
   const woIds = [...new Set([...traces.values()].flatMap((t) => t.origins.flatMap((o) => (o.weavingOrderId ? [o.weavingOrderId] : []))))].sort();
@@ -265,7 +277,7 @@ export async function computeProductProfitability(ctx: {
   const rows: ProductProfitRow[] = [];
   const draftRows: ProductProfitRow[] = [];
   for (const inv of invoices) {
-    const parts = bucketsOf(inv, soldOf, traces, subs).map((p) => ({ ...p, c: costsOf(p.bucket, p.bucket.weavingOrderId ? costs.get(p.bucket.weavingOrderId) : undefined) }));
+    const parts = bucketsOf(inv, { soldOf, consignedOf }, traces, subs).map((p) => ({ ...p, c: costsOf(p.bucket, p.bucket.weavingOrderId ? costs.get(p.bucket.weavingOrderId) : undefined) }));
     const emit = (kind: ProductProfitRow["kind"], month: string, sign: 1 | -1) => { for (const p of parts) (kind === "DRAFT" ? draftRows : rows).push(rowOf(inv, p, { kind, month, sign })); };
     if (inv.status === InvoiceStatus.DRAFT) { if (inRange(inv.issueDate)) emit("DRAFT", monthOf(inv.issueDate), 1); continue; }
     if (inv.confirmedAt === null) continue;

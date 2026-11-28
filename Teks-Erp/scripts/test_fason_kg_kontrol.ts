@@ -25,6 +25,7 @@
 //   an = çıplak `dispatchedAt` (gün sonu yok) → §5c ❌; `!currencyMismatch &&` kaldırılınca §3b §5f ❌. Hepsi geri alındı.
 // NEGATİF SONDA — 2026-11-26 (iskonto çift düşümü): serviste net = `subtotal.minus(discountTotal)` geri konunca
 //   §3n §4d2 §5i ❌ (net 14,55, fark −3,45). Geri alındı.
+// NEGATİF SONDA — 2026-11-26 (inceleme B7): `readSubcontractInvoiceTotals`te `invoiceNetExVat` yerine ikinci formül konunca 43/0 yerine 42/1 (§3n2 ❌). Geri alındı.
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -99,6 +100,10 @@ function bolum3Kaynak(): void {
   walk(root);
   const net = fs.readFileSync(path.join(root, "services/helpers/invoice-net.helper.ts"), "utf8");
   check("§3n ⭐ `discountTotal` src'de nete katılmıyor (iskonto `subtotal`da zaten düşülmüş); tek okuyucu `invoiceNetExVat`", offenders.length === 0 && /export function invoiceNetExVat/.test(net), offenders.join(", "));
+  // İnceleme B7: Kârlılık'ın dış fason fatura okuyucusu neti ikinci formülle (Σ satır) kurmaz.
+  const pf = fs.readFileSync(path.join(root, "services/helpers/profitability-finance.helper.ts"), "utf8");
+  const sub = pf.slice(pf.indexOf("export async function readSubcontractInvoiceTotals"), pf.indexOf("export function readFxRate"));
+  check("§3n2 Kârlılık fason fatura tutarı da `invoiceNetExVat`ten (Σ lineTotal kopyası yok)", /invoiceNetExVat\(/.test(sub) && !/lineTotal/.test(sub));
 }
 
 function bolum3(): void {
