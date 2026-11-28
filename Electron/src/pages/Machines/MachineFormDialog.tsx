@@ -10,6 +10,7 @@ import { machineFormDefaults, machineFormSchema, type MachineFormValues } from "
 import type { Machine } from "./types";
 import { planningToFormText } from "./machinePayload";
 import { MachinePlanningSection } from "./MachinePlanningSection";
+import { MachineDrawingInSection } from "./MachineDrawingInSection";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
@@ -39,6 +40,7 @@ export function MachineFormDialog({ open, onOpenChange, initial, draft, onSubmit
         planRpm: planningToFormText(src.planRpm),
         planEfficiencyPct: planningToFormText(src.planEfficiencyPct),
         maxWorkingWidthCm: planningToFormText(src.maxWorkingWidthCm),
+        frameCount: planningToFormText(src.frameCount),
       }
     : { ...machineFormDefaults, stationId: defaultStationId ?? machineFormDefaults.stationId };
 
@@ -90,7 +92,9 @@ export function MachineFormDialog({ open, onOpenChange, initial, draft, onSubmit
               <Input id="warpBeamSlots" type="number" min={0} max={32} step={1} {...form.register("warpBeamSlots")} />
             </FormField>
           )}
-          {dokumaEnabled && <MachinePlanningSection form={form} hasSavedValues={Boolean(defaults.planRpm || defaults.planEfficiencyPct || defaults.maxWorkingWidthCm)} />}
+          {dokumaEnabled && <MachinePlanningSection form={form} hasSavedValues={Boolean(defaults.planRpm || defaults.planEfficiencyPct || defaults.maxWorkingWidthCm || defaults.frameCount)} />}
+          {/* T2/T3 takılı tahar yalnız kayıtlı tezgâhta (ayrı uçtan anında kaydedilir; form gövdesine girmez). */}
+          {dokumaEnabled && initial?.id && <MachineDrawingInSection machineId={initial.id} />}
         </>
       )}
     </EntityFormDialog>

@@ -647,6 +647,7 @@ model User {
   mergedServiceItems           ServiceItem[]                   @relation("ServiceItemMergedBy")
   createdMachines              Machine[]                       @relation("MachineCreatedBy")
   updatedMachines              Machine[]                       @relation("MachineUpdatedBy")
+  drawingInMountedMachines     Machine[]                       @relation("MachineMountedDrawingInBy")
   createdMachineSpecs          MachineSpec[]                   @relation("MachineSpecCreatedBy")
   updatedMachineSpecs          MachineSpec[]                   @relation("MachineSpecUpdatedBy")
   createdShiftDefinitions      ShiftDefinition[]               @relation("ShiftDefinitionCreatedBy")
@@ -1312,6 +1313,20 @@ model Machine {
   planEfficiencyPct Decimal? @db.Decimal(5, 2)
   maxWorkingWidthCm Decimal? @db.Decimal(6, 2)
 
+  /// TAHAR (T2, Seyitoğlu 2026-11-28) — çerçeve KAPASİTESİ (1..16, NULL = bilinmiyor; CHECK
+  /// `machines_frame_count_range`). Genel gövdeden yazılabilir (`machine-plan-fields.middleware`).
+  frameCount Int? @db.SmallInt
+  /// TAKILI TAHAR — "şu an ne" (defter değil; değişim izi audit). Yazarı YALNIZ
+  /// `helpers/machine-drawing-in.helper` (genel gövdede kapalı, `write-guard.ts`): levent takma
+  /// (DRAWING_IN/HARNESS_CHANGE) ya da koşum açılışı → AUTO; tezgâh tanımında düzeltme → MANUAL.
+  mountedDrawingInPlanId String?        @db.Uuid
+  mountedDrawingInPlan   DrawingInPlan? @relation("MachineMountedDrawingInPlan", fields: [mountedDrawingInPlanId], references: [id], onDelete: Restrict)
+  /// AUTO | MANUAL (CHECK `machines_mounted_drawing_in_source_chk`); NULL = hiç yazılmadı.
+  mountedDrawingInSource String?        @db.VarChar(8)
+  mountedDrawingInAt     DateTime?      @db.Timestamptz
+  mountedDrawingInById   String?        @db.Uuid
+  mountedDrawingInBy     User?          @relation("MachineMountedDrawingInBy", fields: [mountedDrawingInById], references: [id], onDelete: Restrict)
+
   // Relations
   station            Station                  @relation(fields: [stationId], references: [id])
   devices            Device[]
@@ -1383,6 +1398,8 @@ model Machine {
   // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
   // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([nameFold])
+  @@index([mountedDrawingInPlanId])
+  @@index([mountedDrawingInById])
   @@map("machines")
 }
 
@@ -2601,6 +2618,8 @@ model DrawingInPlan {
   isActive       Boolean  @default(true)
 
   fabricItems Item[] @relation("ItemDrawingInPlan")
+  /// T2: bu taharın şu an takılı olduğu tezgâhlar (`Machine.mountedDrawingInPlanId`).
+  mountedOnMachines Machine[] @relation("MachineMountedDrawingInPlan")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

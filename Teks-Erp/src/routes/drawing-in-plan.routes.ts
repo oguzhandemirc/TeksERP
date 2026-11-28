@@ -18,6 +18,7 @@ import {
   listDrawingInPlans,
   updateDrawingInPlan,
 } from "../services/drawing-in-plan.service";
+import { readMachineDrawingInFit, readMachinesForDrawingInPlan, setMountedDrawingInManual } from "../services/helpers/machine-drawing-in.helper";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -67,6 +68,61 @@ const similarQuery = z.object({
 router.get("/similar-names", requirePermission("warpspec:write"), wrap(async (req, res) => {
   const q = similarQuery.parse(req.query);
   res.status(200).json({ success: true, data: await findSimilarDrawingInPlanNames(q.name, q.excludeId) });
+}));
+
+const machineParam = z.object({ machineId: z.string().uuid("Geçersiz makine ID") });
+const mountBody = z.object({ drawingInPlanId: z.string().uuid("Geçersiz tahar planı ID").nullable() }).strict();
+
+/**
+ * @openapi
+ * /api/drawing-in-plans/machines/{machineId}:
+ *   get:
+ *     tags: [DrawingInPlans]
+ *     summary: Tezgâhın takılı taharı (kaynak, kim/ne zaman) + tahar değiştirmeden girebilen kumaşlar (T2/T3). `/:id`den ÖNCE.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: machineId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Takılı tahar + uyan kumaşlar }
+ *       404: { description: Makine bulunamadı }
+ *   put:
+ *     tags: [DrawingInPlans]
+ *     summary: Tezgâhın takılı taharını elle düzelt ({ drawingInPlanId | null }); kaynak MANUAL, iz audit; çerçeve yetmezse uyarı
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: machineId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Güncellendi (değişmediyse changed=false) }
+ *       400: { description: Plan bulunamadı ya da pasif (DRAWING_IN_PLAN_NOT_FOUND) }
+ */
+router.get("/machines/:machineId", requirePermission("station:read"), wrap(async (req, res) => {
+  const { machineId } = machineParam.parse(req.params);
+  res.status(200).json({ success: true, data: await readMachineDrawingInFit(machineId) });
+}));
+
+router.put("/machines/:machineId", requirePermission("station:write"), wrap(async (req, res) => {
+  const { machineId } = machineParam.parse(req.params);
+  const { drawingInPlanId } = mountBody.parse(req.body ?? {});
+  const r = await setMountedDrawingInManual(machineId, drawingInPlanId, req.user?.userId);
+  res.status(200).json({
+    success: true, data: { changed: r.changed }, message: r.changed ? "Takılı tahar güncellendi." : "Takılı tahar zaten bu.",
+    ...(r.warnings.length ? { warnings: r.warnings } : {}),
+  });
+}));
+
+/**
+ * @openapi
+ * /api/drawing-in-plans/{id}/machines:
+ *   get:
+ *     tags: [DrawingInPlans]
+ *     summary: Bu taharın (aynı özet) şu an takılı olduğu aktif dokuma tezgâhları (T3)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Tezgâh listesi }
+ *       404: { description: Bulunamadı }
+ */
+router.get("/:id/machines", requirePermission("warpspec:read"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  res.status(200).json({ success: true, data: await readMachinesForDrawingInPlan(id) });
 }));
 
 /**

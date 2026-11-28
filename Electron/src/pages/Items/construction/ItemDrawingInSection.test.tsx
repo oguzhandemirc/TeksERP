@@ -25,7 +25,32 @@ function Harness({ planId }: { planId: string }) {
 
 beforeEach(() => {
   get.mockReset();
-  get.mockImplementation((url: string) => Promise.resolve({ data: { success: true, data: url === "/api/drawing-in-plans/p1" ? PLAN : [] } }));
+  get.mockImplementation((url: string) => Promise.resolve({ data: { success: true, data: url === "/api/drawing-in-plans/p1" ? PLAN : url === "/api/drawing-in-plans/p1/machines" ? MACHINES : [] } }));
+});
+
+const MACHINES = {
+  plan: { id: "p1", code: "THR-0001", name: "Düz 4", frameCount: 4 },
+  machines: [
+    { id: "m1", code: "T-07", name: "Tezgah 7", frameCount: 8, source: "AUTO", mountedAt: null, planId: "p1", planCode: "THR-0001" },
+    { id: "m2", code: "T-09", name: "Tezgah 9", frameCount: null, source: "MANUAL", mountedAt: null, planId: "p9", planCode: "THR-0009" },
+  ],
+};
+
+describe("ItemDrawingInSection — uyan tezgâhlar (T3)", () => {
+  it("bu taharın takılı olduğu tezgâhlar listelenir; aynı özetli başka plan kodu parantezde", async () => {
+    renderWithProviders(<Harness planId="p1" />);
+    const box = await screen.findByTestId("plan-machines");
+    expect(box.textContent).toContain("Bu taharın takılı olduğu tezgâhlar");
+    expect(box.textContent).toContain("T-07");
+    expect(box.textContent).toContain("T-09(THR-0009)");
+    expect(box.textContent).not.toContain("(THR-0001)");
+  });
+
+  it("takılı tezgâh yoksa açıklayıcı boş durum", async () => {
+    get.mockImplementation((url: string) => Promise.resolve({ data: { success: true, data: url === "/api/drawing-in-plans/p1" ? PLAN : url.endsWith("/machines") ? { ...MACHINES, machines: [] } : [] } }));
+    renderWithProviders(<Harness planId="p1" />);
+    expect((await screen.findByTestId("plan-machines")).textContent).toContain("bu tahar takılı tezgâh yok");
+  });
 });
 
 describe("ItemDrawingInSection", () => {

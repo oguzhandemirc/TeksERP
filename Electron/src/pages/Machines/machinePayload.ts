@@ -1,7 +1,7 @@
 import type { Machine } from "./types";
 import type { MachineFormValues } from "./schema";
 
-export const MACHINE_PLANNING_KEYS = ["planRpm", "planEfficiencyPct", "maxWorkingWidthCm"] as const;
+export const MACHINE_PLANNING_KEYS = ["planRpm", "planEfficiencyPct", "maxWorkingWidthCm", "frameCount"] as const;
 type PlanningKey = (typeof MACHINE_PLANNING_KEYS)[number];
 
 /** Kayıtlı planlama değeri forma: sayı/metin → virgüllü metin, yok → "". */

@@ -14,6 +14,19 @@ export interface LoomCandidate {
   sameDesignRunning: boolean;
   hasOpenRun: boolean;
   widthWarning: boolean;
+  /** T3 tahar uyumu (eski sunucuda yok → nötr): SAME düğümle geçilir · DIFFERENT yeni tahar · null bilinmiyor. */
+  drawingInFit?: "SAME" | "DIFFERENT" | null;
+  /** Kumaşın tahar planı tezgâhın çerçeve kapasitesini aşıyor. */
+  frameShortage?: boolean;
+}
+
+/** Tahar rozetleri (sıra sunucudan; burada yalnız etiket). Nötr adayda rozet yok. */
+export function drawingInBadges(c: LoomCandidate): Array<{ key: string; text: string; tone: string; title: string }> {
+  const out: Array<{ key: string; text: string; tone: string; title: string }> = [];
+  if (c.drawingInFit === "SAME") out.push({ key: "same", text: "Düğümle geçilir", tone: "border-success/40 text-success", title: "Tezgâhta aynı tahar takılı — yeni tahar gerekmez" });
+  if (c.drawingInFit === "DIFFERENT") out.push({ key: "diff", text: "Yeni tahar gerekir", tone: "border-warning/40 text-warning", title: "Tezgâhtaki tahar bu kumaşınkinden farklı" });
+  if (c.frameShortage) out.push({ key: "frames", text: "Çerçeve yetmez", tone: "border-destructive/40 text-destructive", title: "Kumaşın tahar planı tezgâhın çerçeve sayısından fazla çerçeve ister" });
+  return out;
 }
 
 export interface LoomSuggestion {

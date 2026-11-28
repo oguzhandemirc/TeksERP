@@ -32,6 +32,10 @@ import {
 } from "./helpers/warp-beam-mount.helper";
 import { closeToMeasuredTx, loadBeamTx, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { qtyText } from "./helpers/qty-text.helper";
+import { autoMountDrawingInTx, logDrawingInMountAudit } from "./helpers/machine-drawing-in.helper";
+
+/** Taharı yeniden kuran bağlama yöntemleri (düğüm hariç). */
+const TAHAR_CHANGING_MOUNT: ReadonlySet<WarpBeamMountMethod> = new Set<WarpBeamMountMethod>(["DRAWING_IN", "HARNESS_CHANGE"]);
 
 export interface MountBeamInput {
   machineId: string;
@@ -99,7 +103,7 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
     }
     await assertSlotFreeTx(tx, machine.id, input.position, machine.code);
     // Devere ek B3: gövde–tezgâh uyumu (`devere.beamBodyMachineFit`: WARN uyarı, BLOCK 409); gövde durumu kancada yürür.
-    const link = await tx.warpBeam.findUnique({ where: { id: beam.id }, select: { beamBodyId: true } });
+    const link = await tx.warpBeam.findUnique({ where: { id: beam.id }, select: { beamBodyId: true, weavingOrder: { select: { itemId: true } } } });
     if (link?.beamBodyId) warnings.push(...(await beamBodyMachineFitVerdictTx(tx, link.beamBodyId, machine.id)));
     // S9: gövde eni ↔ tarak eni bilgi uyarısı (engel değil).
     if (link?.beamBodyId) warnings.push(...(await beamBodyWidthWarningsTx(tx, beam.warpSpecId, [{ label: "", beamBodyId: link.beamBodyId }])));
@@ -133,9 +137,14 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
     } catch (e) {
       slotRaceTo409(e, machine.code, input.position);
     }
-    return { ev, machine, beamNo: beam.beamNo };
+    // T2: yeni tahar/çerçeve değişimi beyanı tezgâhın takılı taharını işin kumaşına çeker; düğüm (TYING_IN) taharı korur.
+    const drawingIn = input.mountMethod && TAHAR_CHANGING_MOUNT.has(input.mountMethod)
+      ? await autoMountDrawingInTx(tx, { machineId: machine.id, itemId: link?.weavingOrder?.itemId, userId, reason: `levent takma (${beam.beamNo})` })
+      : null;
+    return { ev, machine, beamNo: beam.beamNo, drawingIn };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "MOUNTED", data: { beamId: id, machineId: result.machine.id, position: input.position, mountMethod: input.mountMethod ?? null } });
+  await logDrawingInMountAudit(result.drawingIn, userId);
   return { success: true, data: await freshDto(id), message: `${result.beamNo} → ${result.machine.name} ${input.position}. yuvaya bağlandı`, ...(warnings.length ? { warnings } : {}) };
 }
 

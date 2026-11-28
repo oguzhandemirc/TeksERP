@@ -12,6 +12,9 @@ export interface Machine {
   planRpm?: number | null;
   planEfficiencyPct?: number | string | null;
   maxWorkingWidthCm?: number | string | null;
+  /** T2 (eski sunucuda yok): çerçeve kapasitesi 1..16 ve takılı tahar (yazımı ayrı uçtan — genel gövdede kapalı). */
+  frameCount?: number | null;
+  mountedDrawingInPlanId?: string | null;
   /** Liste ucu istasyonu gömer (`defaultInclude: { station: true }`); `kind` tezgah etiketi düğmesini açar. */
   station?: { id: string; code: string; name: string; kind?: StationKind };
   createdAt: string;

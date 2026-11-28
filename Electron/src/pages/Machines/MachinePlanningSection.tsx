@@ -11,7 +11,7 @@ export function MachinePlanningSection({ form, hasSavedValues }: { form: UseForm
   const hasError = MACHINE_PLANNING_KEYS.some((k) => Boolean(err[k]));
   return (
     <CollapsibleFormSection title="Planlama" defaultOpen={hasSavedValues} forceOpen={hasError} testId="machine-planning">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <FormField label="Devir (dk)" htmlFor="planRpm" error={err.planRpm}>
           <Input id="planRpm" inputMode="numeric" placeholder="600" {...form.register("planRpm")} />
         </FormField>
@@ -20,6 +20,14 @@ export function MachinePlanningSection({ form, hasSavedValues }: { form: UseForm
         </FormField>
         <FormField label="En geniş çalışma eni (cm)" htmlFor="maxWorkingWidthCm" error={err.maxWorkingWidthCm}>
           <Input id="maxWorkingWidthCm" inputMode="decimal" placeholder="340" {...form.register("maxWorkingWidthCm")} />
+        </FormField>
+        <FormField
+          label="Çerçeve sayısı"
+          htmlFor="frameCount"
+          error={err.frameCount}
+          info="Tezgâhtaki çerçeve (gücü) kapasitesi. Kumaşın tahar planı bundan fazla çerçeve isterse tezgâh önerisinde uyarı çıkar."
+        >
+          <Input id="frameCount" inputMode="numeric" placeholder="12" {...form.register("frameCount")} />
         </FormField>
       </div>
     </CollapsibleFormSection>

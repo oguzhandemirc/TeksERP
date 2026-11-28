@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { candidateDetail, orderByFit, suggestionSummary, type LoomCandidate, type LoomSuggestion } from "./types";
+import { candidateDetail, drawingInBadges, orderByFit, suggestionSummary, type LoomCandidate, type LoomSuggestion } from "./types";
 
 const c = (id: string, tier: LoomCandidate["tier"], over: Partial<LoomCandidate> = {}): LoomCandidate => ({
   machineId: id, code: id.toUpperCase(), name: id, tier, weavableM: null, surplusM: null, missingWarpSpecCodes: [], readyBeamNos: [],
@@ -24,5 +24,12 @@ describe("tezgâh önerisi görünümü (SY-M3)", () => {
     expect(candidateDetail(c("a", "BEAM_SHORT", { weavableM: 640 }))).toContain("640 m dokur");
     expect(candidateDetail(c("a", "WARP_CHANGE", { missingWarpSpecCodes: ["CZ-1"], readyBeamNos: ["L-7"] }))).toBe("CZ-1 takılmalı · hazır levent: L-7");
     expect(candidateDetail(c("a", "READY", { sameDesignRunning: true, hasOpenRun: true }))).toBe("aynı desen koşuyor");
+  });
+
+  it("tahar rozetleri (T3): aynı → düğümle geçilir, farklı → yeni tahar, çerçeve yetmez; eski sunucu / nötr → rozet yok", () => {
+    expect(drawingInBadges(c("a", "READY", { drawingInFit: "SAME" })).map((b) => b.text)).toEqual(["Düğümle geçilir"]);
+    expect(drawingInBadges(c("a", "READY", { drawingInFit: "DIFFERENT", frameShortage: true })).map((b) => b.text)).toEqual(["Yeni tahar gerekir", "Çerçeve yetmez"]);
+    expect(drawingInBadges(c("a", "READY", { drawingInFit: null }))).toEqual([]);
+    expect(drawingInBadges(c("a", "READY"))).toEqual([]);
   });
 });
