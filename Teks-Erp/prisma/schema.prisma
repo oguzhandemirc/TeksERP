@@ -2620,6 +2620,9 @@ model DrawingInPlan {
   fabricItems Item[] @relation("ItemDrawingInPlan")
   /// T2: bu taharın şu an takılı olduğu tezgâhlar (`Machine.mountedDrawingInPlanId`).
   mountedOnMachines Machine[] @relation("MachineMountedDrawingInPlan")
+  /// Geri almada geri konacak eski tahar (levent takma / koşum açılışı ileri satırı).
+  prevOnBeamEvents  WarpBeamEvent[] @relation("WarpBeamEventDrawingInPrev")
+  prevOnMachineRuns MachineRun[]    @relation("MachineRunDrawingInPrev")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2896,6 +2899,15 @@ model WarpBeamEvent {
   setupMinutes   Int?
   /// Bağlama/söküm/tüketim anında tezgah sayacı (bilgi).
   machineCounter Decimal?             @db.Decimal(12, 3)
+  /// TAHAR GERİ YÜKLEME (MOUNTED): bu takma tezgâhın takılı taharını değiştirdiyse ESKİ plan/kaynak ve makineye
+  /// yazılan `mountedDrawingInAt`; MOUNT_CANCEL makine hâlâ bu yazımdaysa (AUTO + aynı an) eskisini geri koyar.
+  /// Bir kez yazılır, hiç değişmez. Yazar `machine-drawing-in.helper` üzerinden `warp-beam-mount.service`.
+  drawingInPrevPlanId String?        @db.Uuid
+  drawingInPrevPlan   DrawingInPlan? @relation("WarpBeamEventDrawingInPrev", fields: [drawingInPrevPlanId], references: [id], onDelete: Restrict)
+  /// AUTO | MANUAL | NULL (eski kaynak hiç yazılmamıştı) — CHECK `warp_beam_events_drawing_in_prev_source_chk`.
+  drawingInPrevSource String?        @db.VarChar(8)
+  /// NULL = bu takma taharı değiştirmedi (geri almada tahar adımı yok).
+  drawingInSetAt      DateTime?      @db.Timestamptz
   /// CONSUMED/ADJUST/EXHAUSTED/DISMOUNTED: metre nasıl bilindi (#14).
   lengthSource   WarpLengthSource?
   /// WEIGHED kaynağında brüt/dara kg (#13) — dara bilinmiyorsa null, metre ESTIMATED'a düşer.
@@ -2932,6 +2944,7 @@ model WarpBeamEvent {
   @@index([consignmentItemId])
   @@index([rollId])
   @@index([beamId, kind, createdAt])
+  @@index([drawingInPrevPlanId])
   @@map("warp_beam_events")
 }
 
@@ -3536,6 +3549,16 @@ model MachineRun {
   item         Item?         @relation("MachineRunItem", fields: [itemId], references: [id], onDelete: Restrict)
   color        Color?        @relation("MachineRunColor", fields: [colorId], references: [id], onDelete: Restrict)
 
+  /// TAHAR GERİ YÜKLEME: koşum açılışı tezgâhın takılı taharını değiştirdiyse ESKİ plan/kaynak ve makineye
+  /// yazılan `mountedDrawingInAt`; geri alma makine hâlâ bu yazımdaysa (AUTO + aynı an) eskisini geri koyar.
+  /// Bir kez (INSERT'te) yazılır, hiç değişmez; genel gövdede yazılamaz.
+  drawingInPrevPlanId String?        @db.Uuid
+  drawingInPrevPlan   DrawingInPlan? @relation("MachineRunDrawingInPrev", fields: [drawingInPrevPlanId], references: [id], onDelete: Restrict)
+  /// AUTO | MANUAL | NULL — CHECK `machine_runs_drawing_in_prev_source_chk`.
+  drawingInPrevSource String?        @db.VarChar(8)
+  /// NULL = bu koşum taharı değiştirmedi.
+  drawingInSetAt      DateTime?      @db.Timestamptz
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -3544,6 +3567,7 @@ model MachineRun {
   @@index([itemId])
   @@index([colorId])
   @@index([machineId, endedAt])
+  @@index([drawingInPrevPlanId])
   // ŞEMA-DIŞI İKİ PARTIAL UNIQUE (migration 20260913220000, `test_db_invariants` §1):
   //   machine_runs_one_open_per_prod_line_uq (machineId, productionLineNo)
   //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL

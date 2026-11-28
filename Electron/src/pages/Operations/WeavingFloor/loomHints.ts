@@ -3,7 +3,7 @@
 import { formatFactory } from "@/lib/factory-time";
 import { STATE_SOURCE_HINT, STATE_SOURCE_LABEL, STATUS_LABEL, TIER_LABEL, statusOf } from "./palette";
 import { clockStartOf, escalationTierOf, formatNumber, formatShortDuration, todayAvailabilityPct } from "./metrics";
-import type { BeamState, LiveLoom, LossClass, OpenStop } from "./types";
+import type { BeamState, DrawingInState, LiveLoom, LossClass, OpenStop } from "./types";
 
 export type HintTone = "warn" | "danger";
 
@@ -147,6 +147,27 @@ export function chainStepHintOf(step: "notify" | "respond" | "escalate", stop: O
   return escalated && stop.escalatedAt !== null
     ? { title: "Patrona iletildi", lines: [{ label: "İletildi", value: formatFactory(stop.escalatedAt, "HH:mm") }] }
     : { title: "Patrona iletilmedi", lines: [], note: "Hedef süre ve iletim payı dolunca patrona iletilir." };
+}
+
+const DRAWING_IN_SOURCE_LABEL = { AUTO: "otomatik (levent takma / koşum)", MANUAL: "elle (tezgâh tanımı)" } as const;
+
+/** Kart rozeti metni: "TAH-01 · 4 ç." ya da "tahar yok". */
+export function drawingInBadgeText(d: DrawingInState | null): string {
+  return d ? `${d.code} · ${d.frames} ç.` : "tahar yok";
+}
+
+/** Takılı tahar ipucu / yan panel satırları — kod, ad, çerçeve, tezgâh kapasitesi, kaynak. */
+export function drawingInHintOf(d: DrawingInState | null): HintModel {
+  if (!d) return { title: "Tahar yok", lines: [], note: "Bu tezgâha takılı tahar kaydı yok; tahar değiştiren levent takma, koşum açılışı ya da tezgâh tanımı yazar." };
+  const over = d.loomFrames !== null && d.frames > d.loomFrames;
+  return {
+    title: `Takılı tahar: ${d.code}`,
+    subtitle: d.name,
+    lines: [
+      { label: "Çerçeve", value: `${d.frames}${d.loomFrames !== null ? ` / tezgâh ${d.loomFrames}` : ""}`, ...(over ? { tone: "warn" as const } : {}) },
+      { label: "Kaynak", value: d.source ? DRAWING_IN_SOURCE_LABEL[d.source] : "bilinmiyor" },
+    ],
+  };
 }
 
 /** Model → düz metin (aria / test). */

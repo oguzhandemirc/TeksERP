@@ -4,7 +4,7 @@ import { Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatFactory } from "@/lib/factory-time";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { JobAndBeam, ShiftFigures, StopBreakdown } from "./DetailBlocks";
+import { DrawingInBlock, JobAndBeam, ShiftFigures, StopBreakdown } from "./DetailBlocks";
 import { StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
 import { AlertChainTimeline, EscalationDueLine, RecentEvents } from "./Timelines";
@@ -115,6 +115,11 @@ function DetailBody({ loom: t, now, onOpenAlarm }: { loom: LiveLoom; now: number
       <Section title={t.dayBreakdown ? "Bugünkü duruşlar" : "Duruşlar"}>
         <StopBreakdown loom={t} now={now} />
       </Section>
+      {t.drawingIn !== undefined && (
+        <Section title="Tahar">
+          <DrawingInBlock d={t.drawingIn} />
+        </Section>
+      )}
       {(t.job || t.beams.length > 0) && (
         <Section title={t.beams.length === 0 ? "Dokuma iş emri" : t.job ? "Dokuma iş emri ve levent" : "Levent"}>
           <JobAndBeam loom={t} />

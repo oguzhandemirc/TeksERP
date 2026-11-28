@@ -20,6 +20,18 @@ export interface DrawingInMountChange {
   toPlanId: string | null;
   source: MountedDrawingInSource;
   reason: string;
+  /** Otomatik yazımda: eski kaynak ve makineye yazılan an — ileri satıra geri yükleme girdisi olarak gider. */
+  fromSource?: string | null;
+  setAt?: Date;
+}
+
+/** İleri satırın (MOUNTED olayı / koşum) geri yükleme kolonları; değişim yoksa hepsi null. */
+export function drawingInRestoreColumns(change: DrawingInMountChange | null) {
+  return {
+    drawingInPrevPlanId: change?.fromPlanId ?? null,
+    drawingInPrevSource: change?.fromSource ?? null,
+    drawingInSetAt: change?.setAt ?? null,
+  };
 }
 
 const PLAN_BRIEF = { id: true, code: true, name: true, frameCount: true, notation: true, threadingKey: true, isActive: true } as const;
@@ -38,15 +50,42 @@ export async function autoMountDrawingInTx(
   const item = await tx.item.findUnique({ where: { id: input.itemId }, select: { drawingInPlan: { select: { id: true, threadingKey: true } } } });
   const plan = item?.drawingInPlan;
   if (!plan) return null;
-  const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { mountedDrawingInPlanId: true, mountedDrawingInPlan: { select: { threadingKey: true } } } });
+  const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { mountedDrawingInPlanId: true, mountedDrawingInSource: true, mountedDrawingInPlan: { select: { threadingKey: true } } } });
   if (!machine) return null;
   if (machine.mountedDrawingInPlanId === plan.id || machine.mountedDrawingInPlan?.threadingKey === plan.threadingKey) return null;
+  // Yazılan an geri almanın claim anahtarıdır (ms hassasiyetinde JS Date — DB'den okununca birebir eşit).
+  const setAt = new Date();
   await tx.machine.update({
     where: { id: input.machineId },
-    data: { mountedDrawingInPlanId: plan.id, mountedDrawingInSource: "AUTO", mountedDrawingInAt: new Date(), mountedDrawingInById: input.userId ?? null },
+    data: { mountedDrawingInPlanId: plan.id, mountedDrawingInSource: "AUTO", mountedDrawingInAt: setAt, mountedDrawingInById: input.userId ?? null },
     select: { id: true },
   });
-  return { machineId: input.machineId, fromPlanId: machine.mountedDrawingInPlanId, toPlanId: plan.id, source: "AUTO", reason: input.reason };
+  return { machineId: input.machineId, fromPlanId: machine.mountedDrawingInPlanId, toPlanId: plan.id, source: "AUTO", reason: input.reason, fromSource: machine.mountedDrawingInSource, setAt };
+}
+
+/**
+ * Levent takma / koşum geri alındığında taharı geri yükler (aynı tx). Makine hâlâ O yazımdaysa (AUTO + aynı an)
+ * eski plan/kaynak döner; arada elle düzeltme ya da başka otomatik değişim olduysa dokunulmaz (claim 0 → null).
+ */
+export async function revertDrawingInMountTx(
+  tx: Prisma.TransactionClient,
+  input: { machineId: string | null; prevPlanId: string | null; prevSource: string | null; setAt: Date | null; userId?: string | null; reason: string },
+): Promise<DrawingInMountChange | null> {
+  if (!input.machineId || !input.setAt) return null;
+  const current = await tx.machine.findUnique({ where: { id: input.machineId }, select: { mountedDrawingInPlanId: true } });
+  if (!current) return null;
+  const restored = input.prevPlanId !== null;
+  const claim = await tx.machine.updateMany({
+    where: { id: input.machineId, mountedDrawingInSource: "AUTO", mountedDrawingInAt: input.setAt, mountedDrawingInPlanId: current.mountedDrawingInPlanId },
+    data: {
+      mountedDrawingInPlanId: input.prevPlanId,
+      mountedDrawingInSource: input.prevSource,
+      mountedDrawingInAt: restored ? new Date() : null,
+      mountedDrawingInById: restored ? (input.userId ?? null) : null,
+    },
+  });
+  if (claim.count === 0) return null;
+  return { machineId: input.machineId, fromPlanId: current.mountedDrawingInPlanId, toPlanId: input.prevPlanId, source: (input.prevSource ?? "AUTO") as MountedDrawingInSource, reason: input.reason };
 }
 
 /** Değişim izi (best-effort, tx dışında). */

@@ -8,7 +8,7 @@
 // sensörlü (`monitoringState = LIVE`) tezgah "ölçülen"; sensörsüz tezgah günün elle
 // kayıtlarından (duruş · koşum · indirme) "elle". Kaydı olmayan sensörsüz tezgah bilinmez.
 // =============================================================================
-import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass } from "@prisma/client";
+import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass, Prisma } from "@prisma/client";
 import { aggregateMachineKpis, type LoomKpiTerms } from "./loom-efficiency.helper";
 import { sourceBucketOf, type SourceBucket } from "./loom-shift-terms.helper";
 import type { TezgahAlarmNoShiftMode } from "../system-setting.service";
@@ -277,4 +277,21 @@ export function summarizeHalls(looms: readonly FloorLoomCore[]): FloorHallSummar
   return [...groups.entries()]
     .map(([hallId, g]) => ({ hallId, hallName: g.name, ...countFloor(g.looms) }))
     .sort((a, b) => a.hallName.localeCompare(b.hallName, "tr"));
+}
+
+/** T2: salon kartının tahar okuması — makine seçimine eklenir (`...FLOOR_DRAWING_IN_SELECT`). */
+export const FLOOR_DRAWING_IN_SELECT = {
+  frameCount: true, mountedDrawingInSource: true, mountedDrawingInPlan: { select: { code: true, name: true, frameCount: true } },
+} satisfies Prisma.MachineSelect;
+
+export interface FloorDrawingInDto {
+  /** Çerçeve kapasitesi; NULL = bilinmiyor. */
+  frameCount: number | null;
+  /** Takılı tahar; NULL = tahar yok. Kaynak AUTO | MANUAL. */
+  drawingIn: { planCode: string; planName: string; planFrameCount: number; source: string | null } | null;
+}
+
+export function floorDrawingInOf(m: Prisma.MachineGetPayload<{ select: typeof FLOOR_DRAWING_IN_SELECT }>): FloorDrawingInDto {
+  const p = m.mountedDrawingInPlan;
+  return { frameCount: m.frameCount, drawingIn: p ? { planCode: p.code, planName: p.name, planFrameCount: p.frameCount, source: m.mountedDrawingInSource } : null };
 }

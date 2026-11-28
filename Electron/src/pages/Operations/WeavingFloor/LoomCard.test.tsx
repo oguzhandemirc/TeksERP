@@ -36,6 +36,23 @@ describe("LoomCard levent rozeti", () => {
   });
 });
 
+describe("LoomCard tahar rozeti", () => {
+  it("⭐ takılı tahar: kod · çerçeve rozette, ekran okuyucu metninde tahar kodu", () => {
+    render(<LoomCard loom={loom({ drawingIn: { code: "TAH-1", name: "Düz", frames: 4, loomFrames: 8, source: "AUTO" } })} now={NOW} star={false} onSelect={() => undefined} />);
+    expect(screen.getByTestId("drawing-in-tag").textContent).toBe("TAH-1 · 4 ç.");
+    expect(screen.getByRole("button").getAttribute("aria-label")).toContain("tahar TAH-1");
+  });
+
+  it("null → 'tahar yok'; eski sunucu (alan yok) → rozet çizilmez", () => {
+    const { unmount } = render(<LoomCard loom={loom({ drawingIn: null })} now={NOW} star={false} onSelect={() => undefined} />);
+    expect(screen.getByTestId("drawing-in-tag").textContent).toBe("tahar yok");
+    unmount();
+    render(<LoomCard loom={loom({})} now={NOW} star={false} onSelect={() => undefined} />);
+    expect(screen.queryByTestId("drawing-in-tag")).toBeNull();
+    expect(screen.getByRole("button").getAttribute("aria-label")).not.toContain("tahar");
+  });
+});
+
 describe("LoomCard kaynak etiketi", () => {
   const stop = {
     reasonCode: "MEKANIK", label: "Mekanik arıza", lossClass: "UNPLANNED" as const, startedAt: NOW - 30 * 60_000, targetMin: 10, graceMin: 0,

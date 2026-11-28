@@ -1182,6 +1182,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // T2 tezgâh taharı (…_tezgah_tahari) — çerçeve kapasitesi 1..16; takılı tahar kaynağı AUTO|MANUAL
   { table: "machines", name: "machines_frame_count_range" },
   { table: "machines", name: "machines_mounted_drawing_in_source_chk" },
+  // Tahar geri yükleme (…_tezgah_tahar_geri_yukleme) — ileri satırdaki eski kaynak AUTO|MANUAL
+  { table: "machine_runs", name: "machine_runs_drawing_in_prev_source_chk" },
+  { table: "warp_beam_events", name: "warp_beam_events_drawing_in_prev_source_chk" },
   { table: "weave_designs", name: "weave_designs_selvedge_leno_disjoint_chk" },
   { table: "item_warp_layers", name: "item_warp_layers_sort_ck" },
   { table: "product_recipe_weft_yarns", name: "product_recipe_weft_yarns_sort_ck" },

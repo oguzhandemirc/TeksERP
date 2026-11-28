@@ -35,7 +35,7 @@ import { assertRunWeavingOrderGate } from "./helpers/production-chain-gates.help
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsableTx } from "./helpers/item-usage.helper";
 import { emitRunPatternChangedTx } from "./notification-sources/uretim";
-import { autoMountDrawingInTx, logDrawingInMountAudit, type DrawingInMountChange } from "./helpers/machine-drawing-in.helper";
+import { autoMountDrawingInTx, drawingInRestoreColumns, logDrawingInMountAudit, revertDrawingInMountTx, type DrawingInMountChange } from "./helpers/machine-drawing-in.helper";
 
 
 const TABLE = "MACHINE_RUN";
@@ -183,6 +183,9 @@ async function openMachineRunFresh(
         const r = await markWeavingOrderInProgressTx(tx, input.weavingOrderId, userId);
         orderTransitioned = r.transitioned;
       }
+      // T2: koşum açılan kumaşın tahar planı tezgâhın takılı taharı olur (plan yoksa dokunulmaz); INSERT'ten önce
+      // ki eski tahar koşum satırına yazılsın (geri alma geri yükler).
+      drawingInBox.change = await autoMountDrawingInTx(tx, { machineId: machine.id, itemId, userId, reason: "koşum açılışı" });
       const run = await tx.machineRun.create({
         data: {
           machineId: machine.id,
@@ -194,13 +197,12 @@ async function openMachineRunFresh(
           targetUnitsPerMin: input.targetUnitsPerMin ?? null,
           unitsPerCm: input.unitsPerCm != null ? new Prisma.Decimal(input.unitsPerCm) : null,
           clientToken: input.clientToken ?? null,
+          ...drawingInRestoreColumns(drawingInBox.change),
         },
         select: MACHINE_RUN_SELECT,
       });
       // Bildirim (S2): Değiştir yolunda kumaş/renk farklıysa `dokuma.desen-degisti` — aynı tx.
       if (replacedBox.run) await emitRunPatternChangedTx(tx, { machineId: machine.id, from: replacedBox.run, to: run }, userId ?? null);
-      // T2: koşum açılan kumaşın tahar planı tezgâhın takılı taharı olur (plan yoksa dokunulmaz).
-      drawingInBox.change = await autoMountDrawingInTx(tx, { machineId: machine.id, itemId, userId, reason: "koşum açılışı" });
       return run;
     });
   } catch (e) {
@@ -338,6 +340,7 @@ export async function revokeMachineRun(
   reason: string,
   userId?: string,
 ): Promise<ApiResponse<MachineRunDto>> {
+  const drawingInBox: { change: DrawingInMountChange | null } = { change: null };
   const revoked = await prisma.$transaction(async (tx) => {
     const claim = await tx.machineRun.updateMany({
       where: { id: runId, revokedAt: null },
@@ -348,8 +351,12 @@ export async function revokeMachineRun(
       if (!fresh) throw AppError.notFound("Koşum bulunamadı", { runId });
       throw AppError.conflict("Bu koşum zaten geri alınmış.", { code: "RUN_ALREADY_REVOKED", runId, revokedAt: fresh.revokedAt });
     }
+    // Claim'den SONRA taze okuma; koşumun değiştirdiği tahar geri konur (arada elle/başka değişim varsa dokunulmaz).
+    const prev = await tx.machineRun.findUniqueOrThrow({ where: { id: runId }, select: { machineId: true, drawingInPrevPlanId: true, drawingInPrevSource: true, drawingInSetAt: true } });
+    drawingInBox.change = await revertDrawingInMountTx(tx, { machineId: prev.machineId, prevPlanId: prev.drawingInPrevPlanId, prevSource: prev.drawingInPrevSource, setAt: prev.drawingInSetAt, userId, reason: "koşum geri alındı" });
     return tx.machineRun.findUniqueOrThrow({ where: { id: runId }, select: MACHINE_RUN_SELECT });
   });
+  await logDrawingInMountAudit(drawingInBox.change, userId);
 
   await AuditService.log({
     userId,

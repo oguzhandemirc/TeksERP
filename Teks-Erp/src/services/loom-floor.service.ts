@@ -27,7 +27,7 @@ import {
   alarmShiftNotice,
   countFloor,
   escalationDueAt,
-  floorStateSourceOf,
+  floorDrawingInOf, FLOOR_DRAWING_IN_SELECT, type FloorDrawingInDto, floorStateSourceOf,
   floorStopTier,
   loomStateOf,
   loomStopTier,
@@ -94,7 +94,7 @@ export interface LoomFloorOpenRunDto {
   startedAt: Date;
 }
 
-export interface LoomFloorLoomDto {
+export interface LoomFloorLoomDto extends FloorDrawingInDto {
   id: string;
   code: string;
   name: string;
@@ -143,7 +143,7 @@ export interface LoomFloorDto {
 }
 
 const LOOM_SELECT = {
-  id: true, code: true, name: true, productionLineCount: true,
+  id: true, code: true, name: true, productionLineCount: true, ...FLOOR_DRAWING_IN_SELECT,
   station: { select: { id: true, name: true } },
   machineSpec: { select: { monitoringState: true, nominalUnitsPerMin: true } },
   collectorLinks: { select: { collector: { select: { silentSince: true, revokedAt: true } } } },
@@ -291,7 +291,7 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
             }))
         : null,
       beams: ctx.beamsBy ? (ctx.beamsBy.get(loom.id) ?? []) : null,
-      operator: ctx.operators.get(loom.id) ?? null,
+      operator: ctx.operators.get(loom.id) ?? null, ...floorDrawingInOf(loom),
       recentStops: recent.map((s) => ({ id: s.id, reasonCode: s.reasonCode, lossClass: s.lossClass, startedAt: s.startedAt, endedAt: s.endedAt })),
       source: terms.source,
     },

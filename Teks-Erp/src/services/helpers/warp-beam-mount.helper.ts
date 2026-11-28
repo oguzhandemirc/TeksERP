@@ -39,7 +39,10 @@ export async function activeForwardStatusEventTx(client: Pick<Client, "warpBeamE
   return client.warpBeamEvent.findFirst({
     where: { beamId, ...ACTIVE_FORWARD_STATUS_EVENT_WHERE },
     orderBy: { createdAt: "desc" },
-    select: { id: true, kind: true, fromStatus: true, toStatus: true, machineId: true, mountPosition: true, lengthM: true, createdAt: true },
+    select: {
+      id: true, kind: true, fromStatus: true, toStatus: true, machineId: true, mountPosition: true, lengthM: true, createdAt: true,
+      drawingInPrevPlanId: true, drawingInPrevSource: true, drawingInSetAt: true,
+    },
   });
 }
 /** Boğaz-ikiz: `activeForwardStatusEventTx` ile AYNI küme — mutabakat §43 bunu okur. */

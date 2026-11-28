@@ -96,6 +96,21 @@ describe("fromApi — alarm kademesi (ESCALATED) ve alarm bağlantısı", () => 
   });
 });
 
+describe("fromApi — takılı tahar (T2)", () => {
+  it("⭐ kod, ad, plan çerçevesi, tezgâh çerçevesi ve kaynak taşınır", () => {
+    const l = fromApi(dto([loom({ frameCount: 8, drawingIn: { planCode: "TAH-1", planName: "Düz 4", planFrameCount: 4, source: "MANUAL" } })])).looms[0]!;
+    expect(l.drawingIn).toEqual({ code: "TAH-1", name: "Düz 4", frames: 4, loomFrames: 8, source: "MANUAL" });
+  });
+
+  it("null = tahar yok; eski sunucu alanı göndermez → alan kurulmaz; tanınmayan kaynak null", () => {
+    expect(fromApi(dto([loom({ drawingIn: null })])).looms[0]!.drawingIn).toBeNull();
+    expect("drawingIn" in fromApi(dto([loom({})])).looms[0]!).toBe(false);
+    const odd = fromApi(dto([loom({ drawingIn: { planCode: "T", planName: "T", planFrameCount: 2, source: "XYZ" } })])).looms[0]!;
+    expect(odd.drawingIn?.source).toBeNull();
+    expect(odd.drawingIn?.loomFrames).toBeNull();
+  });
+});
+
 describe("fromApi", () => {
   it("⭐ açık duruşun hedef ve payı DONMUŞ değerden; kademe sunucu formülüyle aynı", () => {
     const f = fromApi(dto([loom({
