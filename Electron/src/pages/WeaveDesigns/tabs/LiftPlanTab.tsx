@@ -26,7 +26,7 @@ const LEGEND = "Çerçeve numarasına bir kez tıklayınca döner (leno), ikinci
   + "Sağdaki 1., 2., 3. sütunları seçili kumaşın atkı kartındaki sıra kodundan gelir (hangi atkıda hangi iplik atılır); "
   + "değiştirmek için Atkı raporu sekmesindeki kodu düzenleyin.";
 const ALIAS_INFO = "Hangi atkıda hangi çerçevenin kalktığını gösteren ızgara; başka fabrikalarda armür planı ya da kaldırma planı da denir. "
-  + "Ustaya giden el notunda da \"desen örgüsü\" diye geçer.";
+  + "Ustaya giden el notunda da \"desen örgüsü\" diye geçer. Armür görüntüsü, çerçeve aşımı uyarısı ve tablet ızgarası buradan; maliyete girmez.";
 
 const EMPTY: number[] = [];
 

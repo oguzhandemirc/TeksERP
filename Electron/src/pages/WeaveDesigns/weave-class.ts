@@ -18,8 +18,8 @@ export const SHED_MECHANISM_HINT: Record<ShedMechanism, string> = {
   DOBBY: "Çerçeveleri armür programı kaldırır. Hangi atkıda hangi çerçevenin kalktığı Desen örgüsü sekmesindeki ızgarada çizilir (armür planı).",
   JACQUARD: "Her çözgü teli ayrı bir kancayla kalkar; çerçeve yoktur. Desen tezgâhın desen dosyasından gelir; burada dosya adı, kanca sayısı ve desen rapor ölçüsü tutulur.",
 };
-export const MECHANISM_INFO = "Tezgâhın çözgü tellerini nasıl kaldırdığı: Eksantrik (kamla, basit örgüler), Armür (programlı çerçeveler), Jakar (her tel ayrı kanca).";
-export const STRUCTURE_INFO = "İpliklerin birbirinin altından üstünden nasıl geçtiği. Döner (leno) iki çözgü telinin atkı etrafında dönmesidir; Armür ya da Jakarla dokunur. Bilinmiyorsa boş bırakılabilir.";
+export const MECHANISM_INFO = "Tezgâhın çözgü tellerini nasıl kaldırdığı: Eksantrik (kamla, basit örgüler), Armür (programlı çerçeveler), Jakar (her tel ayrı kanca). Hangi alanların geçerli olduğunu belirler (desen örgüsü, kanca sayısı, tahar uygun mekanizmada okunur); maliyete girmez.";
+export const STRUCTURE_INFO = "İpliklerin birbirinin altından üstünden nasıl geçtiği. Döner (leno) iki çözgü telinin atkı etrafında dönmesidir; Armür ya da Jakarla dokunur. Bilinmiyorsa boş bırakılabilir. Döner seçilince döner kurulumu alanı açılır; maliyete girmez.";
 
 export interface WeaveClass { shedMechanism: ShedMechanism; weaveStructure: WeaveStructure | null }
 

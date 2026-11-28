@@ -37,19 +37,19 @@ export function ItemWeavingDetails({
     <section className="space-y-3 border-t pt-3" data-testid="item-weaving-details" aria-labelledby="item-measures-title">
       <h3 id="item-measures-title" className="text-sm font-medium text-muted-foreground">Ölçüler ve gramaj</h3>
       <div className={widthVisible ? "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" : "grid grid-cols-1 gap-3 sm:grid-cols-3"}>
-        <FormField label="Ham en (cm)" htmlFor="rawWidthCm" error={err.rawWidthCm} info="Tezgâhtan çıkan (terbiye öncesi) kumaşın eni.">
+        <FormField label="Ham en (cm)" htmlFor="rawWidthCm" error={err.rawWidthCm} info="Tezgâhtan çıkan (terbiye öncesi) kumaşın eni. Hesaplanan gramaj = toplam iplik ağırlığı (g/m) ÷ ham en (m); tel/cm ve ham g/mt de bundan. Maliyette atkı boyu = ham en + kenar payı (tarak eni boşsa). Üretimi (tezgâh, KK1, sevk) etkilemez.">
           <Input id="rawWidthCm" inputMode="decimal" placeholder="ör. 300" {...form.register("rawWidthCm")} />
         </FormField>
         {/* K4P: ürün kartı eni (= mamul en, dokuma.md) — muayene puan/100 m² kaynağı #1; iki modül de kapalıyken alan yok. */}
         {widthVisible && (
-          <FormField label="Mamul en (cm)" htmlFor="widthCm" error={err.widthCm} info="Bitmiş kumaşın eni (satış eni). 4 puan muayenesinde puan/100 m² bu enden hesaplanır (boşsa KK1'de ölçülen en); ham en ile birlikte en çekmesini (terbiyede) verir.">
+          <FormField label="Mamul en (cm)" htmlFor="widthCm" error={err.widthCm} info="Bitmiş kumaşın eni (satış eni). 4 puan muayenesinde puan/100 m² bu enden hesaplanır (boşsa KK1'de ölçülen en); en çekmesi % = (ham en − mamul en) ÷ ham en × 100. Sipariş ve teklif satırının eni bundan dolar; tarak eni bundan darsa tezgâh önerisi uyarır; desen kartı çıktısında En olarak basılır.">
             <Input id="widthCm" inputMode="decimal" placeholder="ör. 280" {...form.register("widthCm")} />
           </FormField>
         )}
-        <FormField label="Ham gramaj (g/m²)" htmlFor="rawGsm" error={err.rawGsm}>
+        <FormField label="Ham gramaj (g/m²)" htmlFor="rawGsm" error={err.rawGsm} info="Tezgâhtan çıkan kumaşın ölçülen gramajı. Hesaplanan gramajla karşılaştırılır (fark %10'u aşarsa uyarı) ve ham g/mt bundan hesaplanır; başka hesaba girmez.">
           <Input id="rawGsm" inputMode="decimal" placeholder="ör. 85" {...form.register("rawGsm")} />
         </FormField>
-        <FormField label="Mamul gramaj (g/m²)" htmlFor="finishedGsm" error={err.finishedGsm}>
+        <FormField label="Mamul gramaj (g/m²)" htmlFor="finishedGsm" error={err.finishedGsm} info="Terbiyeden çıkmış kumaşın gramajı. Yalnız mamul g/mt özetinde kullanılır; başka hesaba girmez.">
           <Input id="finishedGsm" inputMode="decimal" placeholder="ör. 90" {...form.register("finishedGsm")} />
         </FormField>
       </div>

@@ -66,7 +66,7 @@ export function ItemYarnFields({ form }: { form: UseFormReturn<ItemFormValues> }
         label="İplik numarası (denye)"
         htmlFor="linearDensityDen"
         error={form.formState.errors.linearDensityDen}
-        info="Çözgü kartı ve kg hesabı için gerekli — kg = tel × denye × metre ÷ 9.000.000. Elinizde dtex/Nm/Ne/g/m varsa çeviriciyi kullanın."
+        info="Kg ve maliyet hesabı bundan — kg = boy × denye ÷ 9.000.000 (çözgüde boy = tel × metre). Denyesiz iplik çözgüye yazılamaz. Elinizde dtex/Nm/Ne/g/m varsa çeviriciyi kullanın."
       >
         <Input id="linearDensityDen" inputMode="decimal" placeholder={fancy ? "Boş bırakılabilir" : "ör. 150"} {...form.register("linearDensityDen")} />
         {suggestion && !fancy && (

@@ -6,6 +6,7 @@ import { useFormContext, useWatch } from "react-hook-form";
 import { Grid3x3 } from "lucide-react";
 import { WarpEndsStrip } from "@/components/weave/WarpEndsStrip";
 import { ReedPlan } from "@/components/weave/ReedPlan";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { parseInput } from "@/pages/Operations/WarpPlan/warp-plan-model";
 import { buildDefaults } from "./payload";
 import { useReedUnit } from "@/hooks/useReedUnit";
@@ -61,15 +62,22 @@ export function WarpSpecVisualPanel({ initial }: { initial?: WarpSpec | null }) 
       <header className="flex items-center gap-2 border-b px-5 py-2.5">
         <Grid3x3 className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold">Görünüm</h3>
+        <InfoPopover label="Görünüm nedir" desc="Kartın görsel özeti; hiçbir hesabı değiştirmez, doğru girdiniz mi diye göz kontrolü içindir. Tel düzeni ve tarak bilgisi devere talimatına da basılır." />
         <span className="ml-auto text-xs text-muted-foreground">tel düzeni · tarak</span>
       </header>
       <div className="space-y-4 px-5 py-4">
         <section className="space-y-1.5">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tel düzeni (çözgü raporu)</h4>
+          <div className="flex items-center gap-1">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tel düzeni (çözgü raporu)</h4>
+            <InfoPopover label="Tel düzeni nedir" desc="Tellerin sırasını renkli şerit olarak çizer; her renk bir iplik satırı (A, B…). Tek iplikte şerit baştan sona A'dır; 3A 4B yazılırsa iki renkli tekrar eden şerit görünür. Devereci cağlığa bobinleri, taharcı gücülere teli bu sırayla dizer." />
+          </div>
           <WarpEndsStrip yarns={stripYarns} endsSequence={seq} sequenceNote={note} pending={!saved} fallbackHint={hint} maxWidth={300} />
         </section>
         <section className="space-y-1.5">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tarak planı</h4>
+          <div className="flex items-center gap-1">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tarak planı</h4>
+            <InfoPopover label="Tarak planı nedir" desc="Tellerin tarak dişlerine nasıl girdiğini çizer: her dişte kaç tel, kenar telleri nerede. Çizim için “Dişten geçen tel” ve tel adedi dolu olmalı." />
+          </div>
           <ReedPlan endsPerDent={intOf(endsPerDent)} reedNo={reedFromInput(reedNo, reedUnit)} reedUnit={reedUnit} totalEnds={total} selvedgeEnds={intOf(selvedge)} endsSequence={seq} maxWidth={300} />
         </section>
       </div>

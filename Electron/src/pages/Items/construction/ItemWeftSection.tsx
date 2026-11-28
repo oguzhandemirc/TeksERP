@@ -20,7 +20,8 @@ import { positiveOrNull } from "@/pages/WeftSpecs/weft-calc";
 const CALC_GRID = "grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]";
 
 const NEW_INFO = "Atkıyı burada girin; Kaydet'e basınca arkada bu kumaşa ait atkı kartı kendiliğinden açılır (kart kodu kumaş kodudur). "
-  + "Aynı atkı başka kumaşta da kullanılacaksa sonra o kumaşta bu kartı seçebilirsiniz.";
+  + "Aynı atkı başka kumaşta da kullanılacaksa sonra o kumaşta bu kartı seçebilirsiniz. "
+  + "Atkı sıklığı ve atkı iplikleri buradan gramaja, kompozisyona, maliyete, iplik ihtiyacına ve tablet iş kartına gider.";
 
 function shareTitle(others: number | null): string {
   return others === null ? "Bu atkı kartının başka kumaşlarda kullanılıp kullanılmadığı bilinmiyor" : `Bu atkı kartı ${others} kumaşta daha kullanılıyor`;
