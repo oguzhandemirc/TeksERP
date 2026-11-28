@@ -17,12 +17,30 @@ import { fmtMeters } from '../../../utils/meters';
 import { heroFigure, parseNum, type BeamDraft } from './receiveDocPayload';
 import type { DevereKabulState } from './useDevereKabul';
 import { ds, MAIN_BLUE } from './devereKabul.styles';
+import { isDifferentBody, optionHint } from './bodyOptions';
 
-/** Devereci ve açık sipariş seçicileri (seçilmiş sipariş listeden düşer). */
-export function HeaderPickers({ state: s, picker, onClose }: { state: DevereKabulState; picker: null | 'sub' | 'order'; onClose: () => void }) {
+export type PickerKind = null | 'sub' | 'order' | 'body';
+
+/** Devereci, açık sipariş ve gövde (D3) seçicileri (seçilmiş sipariş/gövde listeden düşer). */
+export function HeaderPickers({ state: s, picker, onClose }: { state: DevereKabulState; picker: PickerKind; onClose: () => void }) {
   const pickedIds = new Set(s.orders.map((o) => o.orderId));
+  const bodyOpt = (o: (typeof s.bodyOptions)[number]) => ({ value: o.id, label: o.bodyNo, sublabel: optionHint(o) });
   return (
     <>
+      <PickerModal
+        visible={picker === 'body'}
+        title="Deverecideki gövdelerimiz"
+        numColumns={2}
+        pinnedLabel="Bu siparişle gönderilenler"
+        pinnedOptions={s.bodyOptions.filter((o) => o.sentWithOrder).map(bodyOpt)}
+        options={s.bodyOptions.filter((o) => !o.sentWithOrder).map(bodyOpt)}
+        disableSort
+        selectedValue=""
+        loading={s.bodyOptionsLoading}
+        emptyText="Bu deverecide duran boş gövdemiz yok — gövde QR'ını okutun."
+        onDismiss={onClose}
+        onSelect={(id) => { onClose(); s.pickBody(id); }}
+      />
       <PickerModal
         visible={picker === 'sub'}
         title="Devereci"
@@ -124,10 +142,12 @@ interface AddProps {
   setCode: (c: string) => void;
   canAdd: boolean;
   onCamera: () => void;
+  /** D3: deverecideki gövdelerimizden seç (seçenek yoksa düğme yok). */
+  onPickBody: () => void;
 }
 
-/** SOL alt: levent ekleme — gövde QR (kamerada "Numara yaz" da var) ve/veya gövdesiz levent. */
-export function AddBeamCard({ state: s, code, setCode, canAdd, onCamera }: AddProps) {
+/** SOL alt: levent ekleme — gövde QR (kamerada "Numara yaz" da var), listeden gövde (D3) ve/veya gövdesiz levent. */
+export function AddBeamCard({ state: s, code, setCode, canAdd, onCamera, onPickBody }: AddProps) {
   const mode = s.settings.beamBodyMode;
   return (
     <View style={ds.card}>
@@ -135,11 +155,25 @@ export function AddBeamCard({ state: s, code, setCode, canAdd, onCamera }: AddPr
       {mode !== 'OFF' ? (
         <ScannerEntryBar value={code} onChangeText={setCode} placeholder="Gövde QR / no okut-yaz…" onResolve={() => { void s.scanBody(code); setCode(''); }} resolving={s.resolving} onScan={canAdd ? onCamera : undefined} scanCtaLabel="GÖVDE QR OKUT" tone="blue" hardwareListening />
       ) : null}
+      {mode !== 'OFF' && s.bodyOptions.length > 0 ? (
+        <Button mode="outlined" icon="format-list-bulleted" onPress={onPickBody} disabled={!canAdd} contentStyle={ds.tall} testID="devere-kabul-listeden-sec">
+          {`Listeden seç (${s.bodyOptions.length} gövde deverecide)`}
+        </Button>
+      ) : null}
       {mode !== 'REQUIRED' ? (
         <Button mode={mode === 'OFF' ? 'contained' : 'outlined'} buttonColor={mode === 'OFF' ? MAIN_BLUE : undefined} icon="plus" onPress={() => s.openNewLine(null)} disabled={!canAdd} contentStyle={ds.tall} testID="devere-kabul-govdesiz">
           {mode === 'OFF' ? 'LEVENT EKLE' : 'Gövdesiz levent ekle'}
         </Button>
       ) : null}
+    </View>
+  );
+}
+
+/** "farklı gövde" rozeti (turuncu = dikkat): gönderilenden başka gövde döndü; bilgi amaçlı, kabulü engellemez. */
+export function DifferentBodyBadge({ testID }: { testID?: string }) {
+  return (
+    <View style={ds.diffBadge} testID={testID}>
+      <Text style={ds.diffBadgeText}>farklı gövde</Text>
     </View>
   );
 }
@@ -174,7 +208,10 @@ export function LinesCard({ state }: { state: DevereKabulState }) {
               <View style={ds.lineRow}>
                 <Text style={ds.lineIdx}>{i + 1}</Text>
                 <View style={ds.grow}>
-                  <TruncatedText style={ds.lineName}>{lineName(b)}</TruncatedText>
+                  <View style={ds.row}>
+                    <TruncatedText style={[ds.lineName, ds.shrink]}>{lineName(b)}</TruncatedText>
+                    {isDifferentBody(b.body, state.bodyChoices) ? <DifferentBodyBadge testID={`devere-kabul-farkli-${i + 1}`} /> : null}
+                  </View>
                   {gross !== null ? <Text style={ds.lineSub}>{`tartı ${fmtMeters(gross)} kg`}</Text> : null}
                   {spec ? <WarpEndsBand yarns={spec.yarns} endsSequence={spec.endsSequence} sequenceNote={spec.sequenceNote} slots={slots} compact testID={`devere-kabul-tel-${i + 1}`} /> : null}
                 </View>

@@ -16,6 +16,7 @@ import type { DevereMode3, ReworkCandidate } from '../../../services/devereKabul
 import { inputText, validateBeam, type BeamDraft } from './receiveDocPayload';
 import type { LineSheet } from './useDevereKabul';
 import { ds } from './devereKabul.styles';
+import { DifferentBodyBadge } from './DevereKabulParts';
 
 interface Props {
   value: LineSheet;
@@ -23,12 +24,14 @@ interface Props {
   subcontractorName: string;
   /** Ek-2 r: siparişin yeniden sarım adayları (eski sunucu → boş; seçim gizli). */
   reworkCandidates?: ReworkCandidate[];
+  /** D3: gövde bu siparişle gönderilenlerden değilse gönderilenlerin no'ları ("farklı gövde" rozeti); değilse null. */
+  differentFrom?: string | null;
   onSave: (s: LineSheet) => void;
   onRemove: (orderId: string, key: string) => void;
   onDismiss: () => void;
 }
 
-export default function BeamLineSheet({ value, weighing, subcontractorName, reworkCandidates = [], onSave, onRemove, onDismiss }: Props) {
+export default function BeamLineSheet({ value, weighing, subcontractorName, reworkCandidates = [], differentFrom = null, onSave, onRemove, onDismiss }: Props) {
   const [d, setD] = useState<BeamDraft>(value.draft);
   const [tried, setTried] = useState(false);
   const error = validateBeam(d, weighing);
@@ -54,6 +57,12 @@ export default function BeamLineSheet({ value, weighing, subcontractorName, rewo
         </>
       }
     >
+      {differentFrom ? (
+        <View style={styles.diffRow}>
+          <DifferentBodyBadge testID="devere-kabul-satir-farkli" />
+          <Text style={[sheet.hint, styles.grow]}>{`Bu siparişle gönderilen: ${differentFrom} — o gövde deverecide kalmış görünür. Kabul engellenmez.`}</Text>
+        </View>
+      ) : null}
       {body?.kind === 'new' ? (
         <>
           <Text style={sheet.label}>Gövdenin sahibi</Text>
@@ -123,4 +132,9 @@ function ReworkPicker({ candidates, draft: d, onChange }: { candidates: ReworkCa
   );
 }
 
-const styles = StyleSheet.create({ tall: { height: 56 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 } });
+const styles = StyleSheet.create({
+  tall: { height: 56 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  diffRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grow: { flex: 1 },
+});

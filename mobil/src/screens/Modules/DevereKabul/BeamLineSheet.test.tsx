@@ -61,6 +61,22 @@ describe('BeamLineSheet', () => {
     expect(onSave.mock.calls[0][0].draft).toMatchObject({ reworkOfBeamId: 'wb1', lengthM: '950' });
   });
 
+  it('D3 farklı gövde: rozet + gönderilen no görünür, kayıt engellenmez; verilmezse rozet yok', async () => {
+    const onSave = jest.fn();
+    const r = renderWithPaper(<BeamLineSheet value={sheetOf(draft({ body: { kind: 'existing', id: 'b2', bodyNo: 'LG-2', hint: 'DV-7 ile gönderildi' } }))} weighing="OFF" subcontractorName="X" differentFrom="LG-1" onSave={onSave} onRemove={jest.fn()} onDismiss={jest.fn()} />);
+    await act(async () => {});
+    expect(r.getByTestId('devere-kabul-satir-farkli')).toBeTruthy();
+    expect(r.getByText(/Bu siparişle gönderilen: LG-1/)).toBeTruthy();
+    fireEvent.press(r.getByTestId('devere-kabul-satir-kaydet'));
+    await act(async () => {});
+    expect(onSave).toHaveBeenCalled();
+  });
+
+  it('farklı gövde bilgisi yoksa rozet çizilmez', async () => {
+    const r = await setup(sheetOf(draft({ body: { kind: 'existing', id: 'b1', bodyNo: 'LG-1', hint: 'Bizim' } })), 'OFF');
+    expect(r.queryByTestId('devere-kabul-satir-farkli')).toBeNull();
+  });
+
   it('aday yoksa yeniden sarım seçimi çizilmez', async () => {
     const r = await setup(sheetOf(draft()), 'OFF');
     expect(r.queryByText('Yeniden sarım mı?')).toBeNull();
