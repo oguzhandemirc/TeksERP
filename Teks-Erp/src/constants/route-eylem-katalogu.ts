@@ -157,6 +157,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/drawing-in-plans/:id": e("tahar planını düzenledi", "tahar planını düzenlemeye çalıştı"),
   "DELETE /api/drawing-in-plans/:id": e("tahar planını pasife aldı", "tahar planını pasife almaya çalıştı"),
   "POST /api/drawing-in-plans/:id/activate": e("tahar planını yeniden aktif etti", "tahar planını aktif etmeye çalıştı"),
+  "PUT /api/drawing-in-plans/machines/:machineId": e("tezgâhın takılı taharını düzeltti", "tezgâhın takılı taharını düzeltmeye çalıştı"),
   "PUT /api/weave-designs/:id/image": e("desen kartına görsel yükledi", "desen kartına görsel yüklemeye çalıştı"),
   "DELETE /api/weave-designs/:id/image": e("desen kartının görselini kaldırdı", "desen kartının görselini kaldırmaya çalıştı"),
   "PUT /api/item-construction/:itemId/warp-layers": e("ürünün çözgü katmanlarını değiştirdi", "ürünün çözgü katmanlarını değiştirmeye çalıştı"),

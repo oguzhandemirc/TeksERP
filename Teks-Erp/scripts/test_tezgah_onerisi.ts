@@ -10,10 +10,12 @@
 //   §4 CREEL: katman leventsiz — ihtiyaç "levent yok", tezgâh yalnız zeminle T1
 //   §5 dokuma işi kimliğiyle öneri (işin kendi plan metresi) · bilinmeyen iş 404
 //   §5c/§5d kapalı iş ve levent takibi kapalı: aday yok + uyarı.
+//   §7 T3 tahar uyumu: veri yok → nötr (sıra §1 ile aynı); aynı tahar kademe içinde öne, farklı/çerçeve yetmez arkaya.
 //   §6 üretim önerisi levent ihtiyacı: gerekli = ham ÷ (1 − take-up), eksik PLANNED levent boyuna yukarı yuvarlı,
 //      aynı kartı isteyen iki grup stoğu ÇİFT saymaz; CREEL "levent yok"; devere kapalıyken anahtar YOK (bayt-aynı)
 // Negatif sonda: (A) `classifyLoom` kalanı `plannedLengthM`den okuyunca §1c (T2) kırmızı; (B) helper olay
-// tablosunu doğrudan okuyunca §0 kırmızı; (C) kip okunmadan SEPARATE sayılınca §3 kırmızı.
+// tablosunu doğrudan okuyunca §0 kırmızı; (C) kip okunmadan SEPARATE sayılınca §3 kırmızı; (D) `compareCandidates`
+// tahar sırası atlanınca §7d kırmızı (EBAFCD, 2026-11-28 ölçüldü).
 // Çalıştır: npx tsx scripts/test_tezgah_onerisi.ts (yalnız test DB; global ayar yazar → hedefDbEngeli)
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -42,7 +44,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 const TAG = `TEST-SYM2-${Date.now().toString(36).toUpperCase()}`;
 const KEYS = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_AUTO_CONSUME, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.ORDER_PRODUCTION_PROPOSAL];
 const saved = new Map<string, unknown>();
-const made = { station: "", looms: [] as string[], items: [] as string[], specs: [] as string[], beams: [] as string[], runs: [] as string[], weaving: [] as string[], customer: "", recipe: "" };
+const made = { station: "", looms: [] as string[], items: [] as string[], specs: [] as string[], beams: [] as string[], runs: [] as string[], weaving: [] as string[], plans: [] as string[], customer: "", recipe: "" };
 const setSetting = (key: string, value: unknown) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
 
 function statik(): void {
@@ -116,6 +118,32 @@ async function fixtures() {
 
 const mine = (cs: LoomCandidate[]) => cs.filter((c) => made.looms.includes(c.machineId));
 
+/** §7 T3 tahar uyumu: veri yokken §1 sırası aynen; A aynı tahar, B farklı, F çerçeve yetmez → kademe içinde yeniden dizilir. */
+async function taharUyumu(f: Awaited<ReturnType<typeof fixtures>>, c1: LoomCandidate[], code: (id: string) => string): Promise<void> {
+  console.log("\n── §7 Tahar uyumu (T3) ──");
+  check("§7a ⭐ tahar verisi yok → bütün adaylar nötr (drawingInFit null, çerçeve uyarısı yok)", c1.every((c) => c.drawingInFit === null && !c.frameShortage));
+  const plan = async (s: string, frameCount: number) => {
+    const r = await prisma.drawingInPlan.create({ data: { code: `${TAG}-${s}`.slice(0, 32), name: `${TAG} ${s}`, frameCount, threading: [1, 2, 3, 4], notation: "1-2-3-4", threadingKey: `${TAG}-${s}` }, select: { id: true } });
+    made.plans.push(r.id);
+    return r.id;
+  };
+  const P1 = await plan("T1", 4), P2 = await plan("T2", 4);
+  await prisma.item.update({ where: { id: f.X }, data: { drawingInPlanId: P1 } });
+  await prisma.machine.update({ where: { id: f.looms.A }, data: { mountedDrawingInPlanId: P1 } });
+  await prisma.machine.update({ where: { id: f.looms.B }, data: { mountedDrawingInPlanId: P2 } });
+  await prisma.machine.update({ where: { id: f.looms.F }, data: { mountedDrawingInPlanId: P1, frameCount: 2 } });
+  const c7 = mine((await suggestLoomsForWeaving(prisma, { itemId: f.X, plannedM: 1000 })).candidates);
+  const by = (k: keyof typeof f.looms) => c7.find((c) => c.machineId === f.looms[k]);
+  check("§7b A aynı tahar → SAME; B farklı → DIFFERENT; E bilinmiyor → null", by("A")?.drawingInFit === "SAME" && by("B")?.drawingInFit === "DIFFERENT" && by("E")?.drawingInFit === null);
+  check("§7c F: 4 çerçeveli plan, 2 çerçeveli tezgâh → frameShortage", by("F")?.frameShortage === true && by("A")?.frameShortage === false);
+  const order = c7.map((c) => code(c.machineId).slice(-1)).join("");
+  check("§7d ⭐ kademe içinde aynı tahar öne, farklı ve çerçeve yetmez arkaya; kademe sırası korunur (T1: A E B F, sonra C D)", order === "AEBFCD", order);
+  await prisma.item.update({ where: { id: f.X }, data: { drawingInPlanId: null } });
+  const c7n = mine((await suggestLoomsForWeaving(prisma, { itemId: f.X, plannedM: 1000 })).candidates);
+  check("§7e kumaşın planı yoksa tezgâh taharı olsa da nötr, sıra §1 ile aynı", c7n.every((c) => c.drawingInFit === null && !c.frameShortage) && c7n.map((c) => c.machineId).join() === c1.map((c) => c.machineId).join());
+  await prisma.machine.updateMany({ where: { id: { in: made.looms } }, data: { mountedDrawingInPlanId: null, frameCount: null } });
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) throw new Error(engel);
@@ -177,6 +205,8 @@ async function main(): Promise<void> {
   await setSetting(SETTING_KEYS.DEVERE_MOUNT_TRACKING, true);
   check("§5d ⭐ levent takibi kapalı → sınıflama YOK (yanlış T3 yok), MOUNT_TRACKING_OFF uyarısı", s5d.candidates.length === 0 && s5d.warnings.some((w) => w.code === "MOUNT_TRACKING_OFF"), JSON.stringify(s5d.warnings.map((w) => w.code)));
 
+  await taharUyumu(f, c1, code);
+
   console.log("\n── §6 Üretim önerisi levent ihtiyacı ──");
   const admin = await ensureTestAdmin();
   made.customer = (await prisma.customer.create({ data: { code: `${TAG}-M`, name: `${TAG} müşteri` }, select: { id: true } })).id;
@@ -218,7 +248,9 @@ async function cleanup(): Promise<void> {
   await t(() => prisma.systemLog.deleteMany({ where: { recordId: { in: [...made.beams, ...made.items] } } }));
   await t(() => prisma.costStructure.deleteMany({ where: { itemId: { in: made.items } } }));
   await t(() => prisma.itemWarpLayer.deleteMany({ where: { itemId: { in: made.items } } }));
-  await t(() => prisma.item.updateMany({ where: { id: { in: made.items } }, data: { warpSpecId: null } }));
+  await t(() => prisma.item.updateMany({ where: { id: { in: made.items } }, data: { warpSpecId: null, drawingInPlanId: null } }));
+  await t(() => prisma.machine.updateMany({ where: { id: { in: made.looms } }, data: { mountedDrawingInPlanId: null } }));
+  await t(() => prisma.drawingInPlan.deleteMany({ where: { id: { in: made.plans } } }));
   await t(() => prisma.warpSpec.deleteMany({ where: { id: { in: made.specs } } }));
   await t(() => prisma.item.deleteMany({ where: { id: { in: made.items } } }));
   await t(() => prisma.machine.deleteMany({ where: { id: { in: made.looms } } }));

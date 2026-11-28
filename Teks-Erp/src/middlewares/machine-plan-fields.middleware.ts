@@ -7,6 +7,7 @@
 // =============================================================================
 import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
+import { DRAWING_IN_FRAMES_HARD_MAX } from "../constants/drawing-in-plan";
 
 /** Sayı ya da sayı metni → sonlu sayı; boş metin null (panel boş alanı). */
 const numeric = (label: string) =>
@@ -43,6 +44,15 @@ export const machinePlanFields = z
       .optional(),
     planEfficiencyPct: decimal2("Plan randımanı", 100, "Plan randımanı en çok %100 olabilir").optional(),
     maxWorkingWidthCm: decimal2("Azami çalışma eni", 9999.99, "Azami çalışma eni en çok 9999,99 cm olabilir").optional(),
+    // T2 çerçeve kapasitesi: tahar planıyla aynı üst sınır (DRAWING_IN_FRAMES_HARD_MAX); DB CHECK ikinci hat.
+    frameCount: numeric("Çerçeve sayısı")
+      .superRefine((n, ctx) => {
+        if (n === null) return;
+        if (!Number.isInteger(n) || n < 1 || n > DRAWING_IN_FRAMES_HARD_MAX) {
+          ctx.addIssue({ code: "custom", message: `Çerçeve sayısı 1 ile ${DRAWING_IN_FRAMES_HARD_MAX} arasında tam sayı olmalı` });
+        }
+      })
+      .optional(),
   })
   .passthrough();
 

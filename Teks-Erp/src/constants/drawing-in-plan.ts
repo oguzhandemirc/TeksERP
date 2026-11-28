@@ -14,6 +14,10 @@ export const DRAWING_IN_FRAMES_DEFAULT_MAX = 12;
 export const DRAWING_IN_MAX_ENDS = 512;
 export const DRAWING_IN_NOTATION_MAX = 500;
 
+/** T2 tezgâhın takılı taharı nereden geldi (DB CHECK `machines_mounted_drawing_in_source_chk`). */
+export const MOUNTED_DRAWING_IN_SOURCES = ["AUTO", "MANUAL"] as const;
+export type MountedDrawingInSource = (typeof MOUNTED_DRAWING_IN_SOURCES)[number];
+
 export type NotationResult = { ok: true; sequence: number[] } | { ok: false; message: string };
 
 type Tok = { t: "num"; v: number } | { t: "x" } | { t: "(" } | { t: ")" };
@@ -162,4 +166,20 @@ export function drawingInRepeatUnit(sequence: readonly number[]): number[] {
 /** Özetin kanonik metni (sunucu bunu sha256'lar). */
 export function drawingInCanonical(sequence: readonly number[]): string {
   return drawingInRepeatUnit(sequence).join("-");
+}
+
+export type DrawingInFit = "SAME" | "DIFFERENT";
+
+/**
+ * T3 tezgâh ↔ kumaş tahar uyumu (SAF, tek kaynak): özet eşit → SAME ("düğümle geçilir"), farklı → DIFFERENT
+ * ("yeni tahar"), iki taraftan biri bilinmiyorsa null (nötr). Çerçeve yetmezliği yalnız iki sayı da biliniyorsa.
+ */
+export function drawingInFitOf(
+  fabric: { threadingKey: string; frameCount: number } | null,
+  loom: { frameCount: number | null; mountedKey: string | null },
+): { drawingInFit: DrawingInFit | null; frameShortage: boolean } {
+  if (!fabric) return { drawingInFit: null, frameShortage: false };
+  const frameShortage = loom.frameCount != null && fabric.frameCount > loom.frameCount;
+  if (loom.mountedKey == null) return { drawingInFit: null, frameShortage };
+  return { drawingInFit: loom.mountedKey === fabric.threadingKey ? "SAME" : "DIFFERENT", frameShortage };
 }

@@ -19,6 +19,8 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   color: ["clientToken"],
   item: ["clientToken"],
   // Hizmet kartı: genel gövde yalnız ad + birim yazar (servis allowlist'iyle aynı); kod doğuşta, durum yaşam döngüsü ucundan, birleştirme kendi boğazından.
+  // T2 takılı tahar: yazarı yalnız `machine-drawing-in.helper` (otomatik kanca + `PUT /drawing-in-plans/machines/:id`).
+  machine: ["mountedDrawingInPlanId", "mountedDrawingInSource", "mountedDrawingInAt", "mountedDrawingInById"],
   serviceItem: [
     "code", "isActive", "lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason",
     "mergedIntoId", "mergedAt", "mergedById", "createdById", "updatedById",

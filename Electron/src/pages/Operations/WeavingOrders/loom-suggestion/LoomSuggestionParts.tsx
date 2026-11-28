@@ -1,6 +1,6 @@
 // Tezgâh önerisi görsel parçaları (SY-M3): kademe rozeti + sıralı aday listesi. Öneri SIRALAMADIR (K15) — engellemez.
 import { cn } from "@/lib/utils";
-import { LOOM_TIER_META, candidateDetail, type LoomCandidate, type LoomTier } from "./types";
+import { LOOM_TIER_META, candidateDetail, drawingInBadges, type LoomCandidate, type LoomTier } from "./types";
 
 export function LoomTierBadge({ tier, className }: { tier: LoomTier; className?: string }) {
   const m = LOOM_TIER_META[tier];
@@ -32,6 +32,11 @@ export function LoomCandidateList({ candidates, limit = 6 }: { candidates: reado
           {c.name && c.name !== c.code && <span className="text-muted-foreground">{c.name}</span>}
           <span className="text-muted-foreground">{candidateDetail(c)}</span>
           {c.widthWarning && <WidthWarningBadge />}
+          {drawingInBadges(c).map((b) => (
+            <span key={b.key} className={cn("rounded-badge border px-1.5 py-0.5 text-[11px]", b.tone)} title={b.title}>
+              {b.text}
+            </span>
+          ))}
         </li>
       ))}
       {candidates.length > shown.length && <li className="text-xs text-muted-foreground">+{candidates.length - shown.length} tezgâh daha</li>}

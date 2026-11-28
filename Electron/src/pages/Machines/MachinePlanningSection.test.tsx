@@ -19,6 +19,7 @@ const flags = vi.hoisted(() => ({ dokuma: true }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => flags.dokuma }));
 vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: () => null }));
 vi.mock("@/components/forms/ReferenceSelect", () => ({ ReferenceSelect: () => null }));
+vi.mock("./MachineDrawingInSection", () => ({ MachineDrawingInSection: () => null }));
 
 const machine = (over: Partial<Machine> = {}): Machine => ({
   id: "m1", stationId: "s1", code: "T-07", name: "Tezgah 7", isActive: true, warpBeamSlots: 1, createdAt: "", updatedAt: "", ...over,

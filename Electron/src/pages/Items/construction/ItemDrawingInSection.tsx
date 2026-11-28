@@ -6,6 +6,7 @@ import { Rows3 } from "lucide-react";
 import { FormField } from "@/components/forms/FormField";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { DrawingInPreview } from "@/pages/DrawingInPlans/DrawingInPreview";
+import { PlanMachinesList } from "@/pages/DrawingInPlans/PlanMachinesList";
 import { drawingInPlanService } from "@/pages/DrawingInPlans/service";
 import type { DrawingInPlan } from "@/pages/DrawingInPlans/types";
 import { useDrawingInPlanRecordForm } from "@/pages/DrawingInPlans/useDrawingInPlanRecordForm";
@@ -55,6 +56,7 @@ export function ItemDrawingInSection({ form, savedPlanId }: { form: UseFormRetur
             <span className="font-mono text-xs text-muted-foreground">{p.code} · {p.frameCount} çerçeve · {p.notation}</span>
           </p>
           <DrawingInPreview compact frameCount={p.frameCount} threading={p.threading} />
+          <PlanMachinesList planId={p.id} />
         </div>
       )}
     </div>

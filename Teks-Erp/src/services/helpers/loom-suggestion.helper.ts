@@ -5,6 +5,7 @@
 // gerekli · T2 LEVENT YETMEZ ("N m dokur") · T3 ÇÖZGÜ DEĞİŞİMİ (uygun READY levent varsa no'su). SHARED_BEAM
 // zemin leventinde, CREEL leventsiz — ayrı levent aranmaz. Öneri SIRALAMADIR; iş vermeyi engellemez. Tarak
 // eni ürün eninden darsa yalnız UYARI. Takılı levent + kalan YALNIZ `mountedBeamViewsTx` / `readBeamStockBySpec`ten.
+// T3 tahar uyumu (`drawingInFitOf`): kademe İÇİNDE aynı tahar öne, farklı/çerçeve yetmez arkaya; veri yoksa nötr.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -17,6 +18,7 @@ import { readBeamStockBySpec, type StockBeam } from "./warp-beam-stock.helper";
 import { OPEN_MACHINE_RUN_WHERE } from "./machine-run-open.helper";
 import { readDevereEnabled, readDevereMountTracking } from "../system-setting.service";
 import { fabricFromWarpM, warpRequirements, type WarpRequirement } from "./beam-need.helper";
+import { drawingInFitOf, type DrawingInFit } from "../../constants/drawing-in-plan";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -51,6 +53,16 @@ export interface LoomCandidate {
   hasOpenRun: boolean;
   /** Tarak eni ürün eninden dar — eleme DEĞİL, rozet. */
   widthWarning: boolean;
+  /** T3 tahar uyumu: SAME "düğümle geçilir" · DIFFERENT "yeni tahar gerekir" · null bilinmiyor (nötr). */
+  drawingInFit: DrawingInFit | null;
+  /** Kumaşın tahar planı tezgâhın çerçeve kapasitesini aşıyor (iki sayı da biliniyorsa). */
+  frameShortage: boolean;
+}
+
+/** Tahar sıralama sırası kademe İÇİNDE: aynı tahar → bilinmiyor → farklı → çerçeve yetmez. */
+function drawingInRank(c: LoomCandidate): number {
+  if (c.frameShortage) return 3;
+  return c.drawingInFit === "SAME" ? 0 : c.drawingInFit === "DIFFERENT" ? 2 : 1;
 }
 
 export interface LoomSuggestion {
@@ -64,7 +76,7 @@ export interface LoomSuggestion {
 }
 
 interface LoomContext {
-  loom: { id: string; code: string; name: string };
+  loom: { id: string; code: string; name: string; frameCount?: number | null; mountedDrawingInPlan?: { threadingKey: string } | null };
   mounted: MountedBeamView[];
   openRuns: Array<{ itemId: string | null; weaveDesignId: string | null }>;
 }
@@ -72,13 +84,14 @@ interface LoomContext {
 /** Tek tezgâhın sınıfı (saf). `reqs` yalnız kendi leventi olan çözgüler. */
 export function classifyLoom(
   reqs: WarpRequirement[], ctx: LoomContext, stock: Map<string, StockBeam[]>,
-  target: { itemId: string; weaveDesignId: string | null; widthWarning: boolean },
+  target: { itemId: string; weaveDesignId: string | null; widthWarning: boolean; drawingInPlan?: { threadingKey: string; frameCount: number } | null },
 ): LoomCandidate {
   const { widthWarning } = target;
   const sameDesignRunning = ctx.openRuns.some((r) => (target.weaveDesignId ? r.weaveDesignId === target.weaveDesignId : r.itemId === target.itemId));
+  const fit = drawingInFitOf(target.drawingInPlan ?? null, { frameCount: ctx.loom.frameCount ?? null, mountedKey: ctx.loom.mountedDrawingInPlan?.threadingKey ?? null });
   const base = {
     machineId: ctx.loom.id, code: ctx.loom.code, name: ctx.loom.name, weavableM: null, surplusM: null,
-    missingWarpSpecCodes: [] as string[], readyBeamNos: [] as string[], sameDesignRunning, hasOpenRun: ctx.openRuns.length > 0, widthWarning,
+    missingWarpSpecCodes: [] as string[], readyBeamNos: [] as string[], sameDesignRunning, hasOpenRun: ctx.openRuns.length > 0, widthWarning, ...fit,
   };
   const onLoom = reqs.map((r) => ({ r, remainingM: ctx.mounted.filter((b) => b.warpSpecCode === r.warpSpecCode).reduce((s, b) => s + b.remainingM, 0), mounted: ctx.mounted.some((b) => b.warpSpecCode === r.warpSpecCode) }));
   const missing = onLoom.filter((x) => !x.mounted);
@@ -100,9 +113,10 @@ export function classifyLoom(
 
 const TIER_RANK: Record<LoomTier, number> = { READY: 0, BEAM_SHORT: 1, WARP_CHANGE: 2 };
 
-/** Sıra: kademe; T1 içinde aynı desen koşuyor > boş > kalan en yakın; T2'de çok dokuyan; T3'te hazır leventi olan; sonra kod. */
+/** Sıra: kademe; kademe içinde tahar uyumu (T3); T1 içinde aynı desen koşuyor > boş > kalan en yakın; T2'de çok dokuyan; T3'te hazır leventi olan; sonra kod. */
 export function compareCandidates(a: LoomCandidate, b: LoomCandidate): number {
   if (a.tier !== b.tier) return TIER_RANK[a.tier] - TIER_RANK[b.tier];
+  if (drawingInRank(a) !== drawingInRank(b)) return drawingInRank(a) - drawingInRank(b);
   if (a.tier === "READY") {
     const ra = a.sameDesignRunning ? 0 : a.hasOpenRun ? 2 : 1;
     const rb = b.sameDesignRunning ? 0 : b.hasOpenRun ? 2 : 1;
@@ -127,6 +141,14 @@ async function resolveTarget(db: Db, input: LoomSuggestionInput) {
 }
 
 type Target = Awaited<ReturnType<typeof resolveTarget>>;
+
+const LOOM_SELECT = { id: true, code: true, name: true, frameCount: true, mountedDrawingInPlan: { select: { threadingKey: true } } } as const;
+
+/** Hedef kumaşların tahar planı (taslak sayısından bağımsız TEK sorgu); planı olmayan haritada yok. */
+async function readFabricDrawingInPlans(db: Db, itemIds: string[]): Promise<Map<string, { threadingKey: string; frameCount: number }>> {
+  const rows = await db.item.findMany({ where: { id: { in: [...new Set(itemIds)] }, drawingInPlanId: { not: null } }, select: { id: true, drawingInPlan: { select: { threadingKey: true, frameCount: true } } } });
+  return new Map(rows.flatMap((r) => (r.drawingInPlan ? [[r.id, r.drawingInPlan] as const] : [])));
+}
 type Construction = Awaited<ReturnType<typeof resolveEffectiveConstruction>>;
 
 /** Dokuma işi (ya da taslak) için tezgâh önerisi — salt okuma, kilitsiz. */
@@ -190,7 +212,8 @@ async function suggestForTargets(db: Db, targets: ReadonlyArray<{ t: Target; c?:
   }
   const live = prepared.filter((p) => p.live);
   if (live.length === 0) return prepared.map((p) => p.out);
-  const looms = await db.machine.findMany({ where: LOOM_MACHINE_WHERE, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } });
+  const looms = await db.machine.findMany({ where: LOOM_MACHINE_WHERE, select: LOOM_SELECT, orderBy: { code: "asc" } });
+  const plans = await readFabricDrawingInPlans(db, live.map((p) => p.t.itemId));
   const ids = looms.map((l) => l.id);
   const mounted = await mountedBeamViewsTx(db, ids);
   const stock = await readBeamStockBySpec(db, [...new Set(live.flatMap((p) => p.own.map((r) => r.warpSpecId)))]);
@@ -198,7 +221,7 @@ async function suggestForTargets(db: Db, targets: ReadonlyArray<{ t: Target; c?:
     ? await db.machineRun.findMany({ where: { machineId: { in: ids }, ...OPEN_MACHINE_RUN_WHERE }, select: { machineId: true, itemId: true, weavingOrder: { select: { itemId: true, weaveDesignId: true } } } })
     : [];
   for (const p of live) {
-    const target = { itemId: p.t.itemId, weaveDesignId: p.t.weaveDesignId ?? p.c.weaveDesign?.id ?? null, widthWarning: p.widthWarning };
+    const target = { itemId: p.t.itemId, weaveDesignId: p.t.weaveDesignId ?? p.c.weaveDesign?.id ?? null, widthWarning: p.widthWarning, drawingInPlan: plans.get(p.t.itemId) ?? null };
     p.out.candidates = looms.map((loom) => classifyLoom(p.own, {
       loom, mounted: mounted.get(loom.id) ?? [],
       openRuns: runs.filter((r) => r.machineId === loom.id).map((r) => ({ itemId: r.weavingOrder?.itemId ?? r.itemId, weaveDesignId: r.weavingOrder?.weaveDesignId ?? null })),

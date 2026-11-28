@@ -35,6 +35,7 @@ import { assertRunWeavingOrderGate } from "./helpers/production-chain-gates.help
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsableTx } from "./helpers/item-usage.helper";
 import { emitRunPatternChangedTx } from "./notification-sources/uretim";
+import { autoMountDrawingInTx, logDrawingInMountAudit, type DrawingInMountChange } from "./helpers/machine-drawing-in.helper";
 
 
 const TABLE = "MACHINE_RUN";
@@ -166,6 +167,7 @@ async function openMachineRunFresh(
   let created: MachineRunDto;
   // Kapanan eski koşum tx kapanışından dışarı taşınır (audit tx DIŞINDA).
   const replacedBox: { run: MachineRunDto | null } = { run: null };
+  const drawingInBox: { change: DrawingInMountChange | null } = { change: null };
   let orderTransitioned = false;
   try {
     created = await prisma.$transaction(async (tx) => {
@@ -197,6 +199,8 @@ async function openMachineRunFresh(
       });
       // Bildirim (S2): Değiştir yolunda kumaş/renk farklıysa `dokuma.desen-degisti` — aynı tx.
       if (replacedBox.run) await emitRunPatternChangedTx(tx, { machineId: machine.id, from: replacedBox.run, to: run }, userId ?? null);
+      // T2: koşum açılan kumaşın tahar planı tezgâhın takılı taharı olur (plan yoksa dokunulmaz).
+      drawingInBox.change = await autoMountDrawingInTx(tx, { machineId: machine.id, itemId, userId, reason: "koşum açılışı" });
       return run;
     });
   } catch (e) {
@@ -213,6 +217,7 @@ async function openMachineRunFresh(
   const replaced = replacedBox.run;
   if (replaced) await auditRunClosed(replaced, userId);
   await auditRunOpened(created, userId, orderTransitioned ? input.weavingOrderId ?? null : null);
+  await logDrawingInMountAudit(drawingInBox.change, userId);
 
   return {
     success: true,

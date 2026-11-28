@@ -22,6 +22,8 @@ export const machineFormSchema = z.object({
   planRpm: optionalNumberText((n) => n > 0, "Devir sıfırdan büyük tam sayı olmalı", /^\d+$/),
   planEfficiencyPct: optionalNumberText((n) => n >= 0 && n <= 100, "Verim 0 ile 100 arasında olmalı"),
   maxWorkingWidthCm: optionalNumberText((n) => n > 0, "En sıfırdan büyük olmalı"),
+  // T2 çerçeve kapasitesi (tahar planıyla aynı tavan 16; sunucu middleware + DB CHECK aynı aralık).
+  frameCount: optionalNumberText((n) => n >= 1 && n <= 16, "Çerçeve sayısı 1 ile 16 arasında tam sayı olmalı", /^\d+$/),
   // Devere Faz 3: levent yuva sayısı 0..32 (0 = cağlıklı çözgü makinesi); devere kapalıyken alan çizilmez, 1 gider.
   warpBeamSlots: z.coerce.number().int("Yuva sayısı tam sayı olmalı").min(0, "Yuva sayısı negatif olamaz").max(32, "Yuva sayısı en fazla 32"),
 });
@@ -35,4 +37,5 @@ export const machineFormDefaults: MachineFormValues = {
   planRpm: "",
   planEfficiencyPct: "",
   maxWorkingWidthCm: "",
+  frameCount: "",
 };
