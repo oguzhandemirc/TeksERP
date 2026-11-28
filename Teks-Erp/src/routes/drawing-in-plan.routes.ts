@@ -13,6 +13,7 @@ import {
   activateDrawingInPlan,
   createDrawingInPlan,
   deactivateDrawingInPlan,
+  findSimilarDrawingInPlanNames,
   getDrawingInPlan,
   listDrawingInPlans,
   updateDrawingInPlan,
@@ -46,6 +47,26 @@ const listQuery = z.object({
  */
 router.get("/", requirePermission("warpspec:read"), wrap(async (req, res) => {
   res.status(200).json({ success: true, data: await listDrawingInPlans(listQuery.parse(req.query)) });
+}));
+
+const similarQuery = z.object({
+  name: z.string().max(100, "Ad en çok 100 karakter").optional().default(""),
+  excludeId: z.string().uuid("Geçersiz kayıt ID").optional(),
+});
+
+/**
+ * @openapi
+ * /api/drawing-in-plans/similar-names:
+ *   get:
+ *     tags: [DrawingInPlans]
+ *     summary: Benzer adlı tahar planları (yazarken uyarı; engellemez). `/:id`den ÖNCE tanımlı.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Benzer kayıt listesi }
+ */
+router.get("/similar-names", requirePermission("warpspec:write"), wrap(async (req, res) => {
+  const q = similarQuery.parse(req.query);
+  res.status(200).json({ success: true, data: await findSimilarDrawingInPlanNames(q.name, q.excludeId) });
 }));
 
 /**

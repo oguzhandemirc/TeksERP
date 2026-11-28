@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
@@ -52,6 +53,8 @@ export function DrawingInPlanFormDialog({ open, onOpenChange, initial, draft, on
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_9rem]">
               <FormField label="Tahar planı adı" required htmlFor="dip-name" error={form.formState.errors.name}>
                 <Input id="dip-name" maxLength={100} placeholder="Düz 4 çerçeve" {...form.register("name")} />
+                {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzer adlı planları gösterir. */}
+                <SimilarNamesWarning entity="drawing-in-plans" name={form.watch("name") ?? ""} excludeId={initial?.id} />
               </FormField>
               <FormField
                 label="Çerçeve sayısı"

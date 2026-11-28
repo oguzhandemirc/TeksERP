@@ -10,7 +10,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { compressDrawingIn, drawingInRepeatUnit, parseDrawingInNotation } from "../src/constants/drawing-in-plan";
-import { activateDrawingInPlan, createDrawingInPlan, deactivateDrawingInPlan, updateDrawingInPlan } from "../src/services/drawing-in-plan.service";
+import { activateDrawingInPlan, createDrawingInPlan, deactivateDrawingInPlan, findSimilarDrawingInPlanNames, updateDrawingInPlan } from "../src/services/drawing-in-plan.service";
 import { createWeaveDesign } from "../src/services/weave-design.service";
 import { buildWeaveCardView } from "../src/services/weave-card.service";
 import { itemService } from "../src/routes/item.routes";
@@ -94,6 +94,10 @@ async function serviceChecks(adminId: string): Promise<{ planId: string }> {
     (await codeOf(() => createDrawingInPlan({ name: `${TAG} a`, frameCount: 4, threading: [1, 2] }, adminId))) === "DRAWING_IN_PLAN_DUPLICATE");
   check("§2m kenar taharı aşımı → 400",
     (await codeOf(() => updateDrawingInPlan(a.id, { selvedgeThreading: "1-7" }, adminId))) === "DRAWING_IN_FRAME_OUT_OF_RANGE");
+  const sim = await findSimilarDrawingInPlanNames(`${TAG} A`);
+  const simEx = await findSimilarDrawingInPlanNames(`${TAG} A`, a.id);
+  check("§2p benzer-ad ucu planı bulur; excludeId kendini düşürür",
+    sim.some((r) => r.id === a.id && r.code === a.code) && !simEx.some((r) => r.id === a.id), `${sim.length}/${simEx.length}`);
   check("§2n tanınmayan alan → 400", (await codeOf(() => updateDrawingInPlan(a.id, { threadingKey: "x" }, adminId))) === "HTTP400");
   const audit = await prisma.systemLog.count({ where: { tableName: "DRAWING_IN_PLAN", recordId: a.id, action: "CREATE" } });
   check("§2o audit CREATE yazıldı", audit === 1);

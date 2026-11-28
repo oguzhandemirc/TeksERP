@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { AuditService } from "./audit.service";
+import { BaseService } from "./base.service";
 import { nextSeriesNo } from "./number-series.service";
 import { codeCountsForCounter } from "./helpers/series-format.helper";
 import { isUniqueViolation, parseTextField } from "./helpers/cost-input.helper";
@@ -230,4 +231,12 @@ export async function activateDrawingInPlan(id: string, userId?: string): Promis
   if (claim.count === 0) throw AppError.conflict("Tahar planı zaten aktif.");
   await AuditService.log({ userId, action: "UPDATE", tableName: "DRAWING_IN_PLAN", recordId: id, oldData: { isActive: false }, newData: { isActive: true } });
   return { id };
+}
+
+// Benzer-ad uyarısı (yalnız OKUR, engellemez): trigram sorgusunun tek sahibi BaseService; burada yalnız o
+// metot kullanılır — yazma yolları yukarıdaki fonksiyonlarda kalır (BaseController yok).
+const similarNameReader = new BaseService({ modelName: "drawingInPlan", tableName: "DRAWING_IN_PLAN", uniqueField: "code", similarNameField: "name" });
+
+export function findSimilarDrawingInPlanNames(name: string, excludeId?: string): ReturnType<BaseService["findSimilarNames"]> {
+  return similarNameReader.findSimilarNames(name, excludeId ? { excludeId } : {});
 }
