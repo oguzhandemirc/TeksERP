@@ -228,6 +228,12 @@ async function main(): Promise<void> {
       wx?.wastePct === "4.00" && wx.wasteSource === "IPLIK" && wx.specWastePct === "2.00" && wy?.wastePct === "2.00" && wy.wasteSource === "KART" && wy.specWastePct === "2.00",
       JSON.stringify([wx, wy].map((y) => y && { p: y.wastePct, s: y.wasteSource, k: y.specWastePct })));
     check("B6 hesap kuralı değişmedi: X brüt = 50 ÷ 0,96 = 52,083 kg", wx?.grossKg === "52.083", wx?.grossKg);
+    // D1: önizleme çözgü raporunu taşır (yeni sipariş penceresi şeridi) — not yoksa null, varsa talimatla aynı açılım.
+    check("D1 önizleme: dizilim notu yok → sequenceNote null + endsSequence null", pvW.warpSpec.sequenceNote === null && pvW.endsSequence === null);
+    await prisma.warpSpec.update({ where: { id: cXYZ.id }, data: { sequenceNote: "5A 4B 3C" } });
+    const pvS = await previewWarpingOrder({ warpSpecId: cXYZ.id, beamLines: [{ beamCount: 1, beamLengthM: 1000 }], extraWarpSpecIds: [], fixedWasteM: 0 });
+    check("D1 önizleme: \"5A 4B 3C\" → rapor 12 tel × 600 = 7200 tel", pvS.warpSpec.sequenceNote === "5A 4B 3C" && pvS.endsSequence?.repeat.length === 12 && pvS.endsSequence.totalEnds === 7200, JSON.stringify(pvS.endsSequence && { n: pvS.endsSequence.repeat.length, t: pvS.endsSequence.totalEnds }));
+    await prisma.warpSpec.update({ where: { id: cXYZ.id }, data: { sequenceNote: null } });
     await prisma.item.update({ where: { id: yX.id }, data: { yarnWastePct: null } });
     await prisma.warpSpec.update({ where: { id: cXYZ.id }, data: { wastePct: null } });
   } finally {

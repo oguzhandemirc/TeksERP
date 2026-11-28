@@ -41,6 +41,7 @@ const order = (status: WarpingOrder["status"] = "IN_PROGRESS") => ({
   id: "wo-1", orderNo: "FDV1", status, subcontractor: { id: "s1", code: "S", name: "Devereci A" },
   warpSpec: { id: "ws1", code: "CK1", name: "Tül zemin" }, targetLengthM: "1000.000", beamCount: 2,
   beamLines: [{ beamCount: 2, beamLengthM: "500.000" }], yarns: [{ yarnItemId: "y1", code: "IPL-5X", name: "5X" }],
+  fee: { unit: "METRE", unitPrice: "0.05", currency: "USD" }, totals: { endsCount: 6000, netKg: "0", grossKg: "0" },
 }) as unknown as WarpingOrder;
 
 const settlement: WarpingSettlement = {
@@ -73,6 +74,14 @@ beforeEach(() => {
 });
 
 describe("ReceiptsSection", () => {
+  it("④ hedef üstü metre: 'Fazla devere +120 m' + ücret etkisi, eksik etiketi yok", async () => {
+    svc.receipts.mockResolvedValue({ receipts: [receipt()], settlement: { ...settlement, metre: { ...settlement.metre, receivedM: "1120.000", diffM: "120.000", diffPct: "12.00" } } });
+    renderWithProviders(<ReceiptsSection order={order()} />);
+    const m = within(await screen.findByLabelText("Metre mutabakatı"));
+    expect(m.getByTestId("warping-overrun").textContent).toBe("Fazla devere +120 mücret etkisi +120 m × 0,05 = +6,00 USD");
+    expect(m.queryByText("Eksik geldi")).toBeNull();
+  });
+
   it("① mutabakat + kabul satırı; kabul düğmesi durum ve izinle", async () => {
     const { unmount } = renderWithProviders(<ReceiptsSection order={order()} />);
     expect(await screen.findByText(/İrsaliye DV-118/)).toBeTruthy();

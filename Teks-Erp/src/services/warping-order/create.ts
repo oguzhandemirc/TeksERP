@@ -6,6 +6,7 @@
 // başlık claim'i (`updateMany WHERE {id, durum}`) İLK ifade; plan alanları yalnız OPEN (sevksiz) iken.
 // =============================================================================
 import { Currency, OrderStatus, Prisma, WarpingFeeUnit, WarpingOrderStatus } from "@prisma/client";
+import { v5 as uuidv5 } from "uuid";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
@@ -17,9 +18,12 @@ import { readDevereFasonWasteTolerancePct, readDevereWarpFixedWasteM } from "../
 import { readYarnStock } from "../helpers/maliyet-bridge.helper";
 import { computeWarpingPlan, isBeamCountOpen, planTargetSig, planYarnRows, suggestExtraSpecs, type BeamLineInput, type PlanTargetInput, type WarpingPlan } from "./plan";
 import { loadWarpingOrderDto, type WarpingOrderDto } from "./read";
+import { expandWarpSequence, type WarpEndsSequence } from "../helpers/warp-sequence.helper";
+import { WARPING_ORDER_TABLE } from "./table";
+import { auditWarpingDispatch, claimForDispatchTx, dispatchClaimedWarpingOrderTx, dispatchInputSig, dispatchItemsSig, validateLines, type WarpingDispatchLineInput, type WarpingDispatchTxOut } from "./dispatch";
 
 type Tx = Prisma.TransactionClient;
-export const WARPING_ORDER_TABLE = "WARPING_ORDER";
+export { WARPING_ORDER_TABLE };
 const CODE_SCOPE = "warpingOrder";
 export const WARPING_ORDER_MAX_SALES_ORDERS = 50;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -43,7 +47,13 @@ export interface WarpingOrderCreateInput extends WarpingOrderFeeInput {
   wasteTolerancePct?: number | null;
   expectedReturnAt?: string | null;
   notes?: string | null;
+  /** D2: sipariş açılırken ilk iplik sevki (aynı tx, elle sevkin kapıları); yoksa sevk doğmaz. */
+  initialDispatch?: { lines: WarpingDispatchLineInput[] };
 }
+
+/** İlk sevkin token'ı siparişin token'ından belirlenimli türer — replay onu bulup kimliğe katar. */
+const INITIAL_DISPATCH_TOKEN_NS = "6f1d2b8e-3c4a-4e57-9b1a-7d2e5c8f0a13";
+export const initialDispatchToken = (orderToken: string): string => uuidv5(`${orderToken}|ilk-sevk`, INITIAL_DISPATCH_TOKEN_NS);
 
 export interface WarpingOrderPatchInput extends WarpingOrderFeeInput {
   beamLines?: BeamLineInput[];
@@ -107,6 +117,8 @@ function parseReturnAt(v: string | null | undefined): Date | null | undefined {
 
 export interface WarpingOrderPreview {
   warpSpec: WarpingPlan["spec"];
+  /** Dizilim notunun tel tel açılımı (talimatla aynı fonksiyon); not yok/okunamaz → null. */
+  endsSequence: WarpEndsSequence | null;
   extras: WarpingPlan["extras"];
   suggestedExtraSpecs: Array<{ id: string; code: string; name: string }>;
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
@@ -131,6 +143,7 @@ export async function previewWarpingOrder(input: Pick<WarpingOrderCreateInput, "
   let gross = D(0);
   return {
     warpSpec: plan.spec,
+    endsSequence: expandWarpSequence(plan.spec.sequenceNote, plan.yarns.map((y) => y.endsCount)),
     extras: plan.extras,
     suggestedExtraSpecs: suggested,
     beamLines: plan.beamLines.map((l) => ({ beamCount: l.beamCount, beamLengthM: l.beamLengthM.toFixed(3) })),
@@ -158,8 +171,29 @@ export async function previewWarpingOrder(input: Pick<WarpingOrderCreateInput, "
 
 export interface CreateWarpingOrderResult {
   data: WarpingOrderDto;
+  /** D2: siparişle doğan ilk sevk (yoksa null). */
+  initialDispatch: { id: string; dispatchNo: string; yarnTotalKg: string } | null;
+  warnings: string[];
   replayed: boolean;
 }
+
+const INITIAL_DISPATCH_SELECT = {
+  id: true, dispatchNo: true, cancelledAt: true,
+  items: { select: { yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true, packageCount: true, bobbinCount: true } },
+} as const;
+type InitialDispatchHit = Prisma.SubcontractorDispatchGetPayload<{ select: typeof INITIAL_DISPATCH_SELECT }>;
+
+function findInitialDispatch(db: Pick<Tx, "subcontractorDispatch">, orderToken: string | null | undefined): Promise<InitialDispatchHit | null> {
+  if (!orderToken) return Promise.resolve(null);
+  return db.subcontractorDispatch.findUnique({ where: { clientToken: initialDispatchToken(orderToken) }, select: INITIAL_DISPATCH_SELECT });
+}
+
+const initialDispatchRef = (d: InitialDispatchHit | null) => {
+  if (!d) return null;
+  let total = D(0);
+  for (const i of d.items) total = total.plus(i.dispatchedQty);
+  return { id: d.id, dispatchNo: d.dispatchNo, yarnTotalKg: total.toFixed(3) };
+};
 
 interface PriorOrder {
   id: string;
@@ -172,6 +206,7 @@ interface PriorOrder {
   beamLines: Array<{ beamCount: number; beamLengthM: Prisma.Decimal }>;
   extraSpecs: Array<{ warpSpecId: string }>;
   salesOrders: Array<{ orderId: string }>;
+  initial: InitialDispatchHit | null;
 }
 
 /** Saklı siparişin hedef girdisi (açık adet ↔ satırlar) — düzenleme ve replay imzası aynı yerden. */
@@ -184,18 +219,25 @@ const inputSig = (input: PlanTargetInput): string => {
 
 function replayFor(input: WarpingOrderCreateInput) {
   return tokenReplay<PriorOrder, CreateWarpingOrderResult>({
-    find: (db, clientToken) => db.warpingOrder.findUnique({
-      where: { clientToken },
-      select: {
-        id: true, orderNo: true, status: true, warpSpecId: true, subcontractorId: true, beamCount: true, targetLengthM: true,
-        beamLines: { select: { beamCount: true, beamLengthM: true }, orderBy: { sortOrder: "asc" } },
-        extraSpecs: { select: { warpSpecId: true }, orderBy: { sortOrder: "asc" } },
-        salesOrders: { select: { orderId: true } },
-      },
-    }),
+    find: async (db, clientToken) => {
+      const order = await db.warpingOrder.findUnique({
+        where: { clientToken },
+        select: {
+          id: true, orderNo: true, status: true, warpSpecId: true, subcontractorId: true, beamCount: true, targetLengthM: true,
+          beamLines: { select: { beamCount: true, beamLengthM: true }, orderBy: { sortOrder: "asc" } },
+          extraSpecs: { select: { warpSpecId: true }, orderBy: { sortOrder: "asc" } },
+          salesOrders: { select: { orderId: true } },
+        },
+      });
+      return order ? { ...order, initial: await findInitialDispatch(db, clientToken) } : null;
+    },
     alive: (p) => {
       if (p.status === WarpingOrderStatus.CANCELLED) {
         throw AppError.conflict(`Bu form daha önce kaydedilmiş ve sipariş İPTAL edilmiş (${p.orderNo}) — yeni sipariş için formu kapatıp yeniden açın.`, { code: "WARPING_ORDER_CANCELLED", warpingOrderId: p.id, orderNo: p.orderNo });
+      }
+      // 4. durum: siparişle doğan ilk sevk sonradan iptal edildiyse "zaten kayıtlı" demek yanlış cevaptır.
+      if (p.initial?.cancelledAt) {
+        throw AppError.conflict(`Bu form daha önce kaydedilmiş (${p.orderNo}) ama ilk iplik sevki ${p.initial.dispatchNo} İPTAL edilmiş — sevki sipariş sayfasından yeniden açın.`, { code: "DISPATCH_CANCELLED", warpingOrderId: p.id, dispatchId: p.initial.id });
       }
     },
     identity: (p) => [
@@ -204,13 +246,16 @@ function replayFor(input: WarpingOrderCreateInput) {
       { ad: "beamLines", mevcut: planTargetSig(storedTarget(p)), gelen: inputSig(input) },
       { ad: "extraWarpSpecIds", mevcut: p.extraSpecs.map((e) => e.warpSpecId).join(","), gelen: (input.extraWarpSpecIds ?? []).join(",") },
       { ad: "salesOrderIds", mevcut: p.salesOrders.map((s) => s.orderId).sort().join(","), gelen: [...new Set(input.salesOrderIds ?? [])].sort().join(",") },
+      // D2: ilk sevk satırları kimliğe girer (sevksiz ↔ sevksiz boş imza; eski istemci etkilenmez).
+      { ad: "initialDispatch", mevcut: p.initial ? dispatchItemsSig(p.initial.items) : "", gelen: input.initialDispatch ? dispatchInputSig(input.initialDispatch.lines) : "" },
     ],
     collision: (p) => `Bu işlem kimliği başka içerikli bir devere siparişine (${p.orderNo}) ait — formu yeniden açıp gönderin.`,
-    respond: async (p) => ({ data: await loadWarpingOrderDto(prisma, p.id), replayed: true }),
+    respond: async (p) => ({ data: await loadWarpingOrderDto(prisma, p.id), initialDispatch: initialDispatchRef(p.initial), warnings: [], replayed: true }),
   });
 }
 
 export async function createWarpingOrder(input: WarpingOrderCreateInput, userId: string): Promise<CreateWarpingOrderResult> {
+  if (input.initialDispatch) validateLines(input.initialDispatch.lines);
   return replayFor(input).run(input.clientToken, async () => {
     await assertSubcontractor(prisma, input.subcontractorId);
     const salesOrderIds = await resolveSalesOrders(prisma, input.salesOrderIds);
@@ -237,13 +282,27 @@ export async function createWarpingOrder(input: WarpingOrderCreateInput, userId:
       });
       await writePlanChildrenTx(tx, header.id, plan);
       if (salesOrderIds.length > 0) await tx.warpingOrderToOrder.createMany({ data: salesOrderIds.map((orderId) => ({ warpingOrderId: header.id, orderId })) });
-      return { id: header.id, orderNo, plan, salesOrderIds };
+      // D2: ilk sevk AYNI tx'te, elle sevkin yolu (claim → plan dışı 400 → lot kuralı → tek sahip); düşerse sipariş de doğmaz.
+      let dispatch: WarpingDispatchTxOut | null = null;
+      if (input.initialDispatch) {
+        dispatch = await dispatchClaimedWarpingOrderTx(tx, await claimForDispatchTx(tx, header.id, userId), {
+          clientToken: input.clientToken ? initialDispatchToken(input.clientToken) : undefined,
+          lines: input.initialDispatch.lines,
+        }, { userId });
+      }
+      return { id: header.id, orderNo, plan, salesOrderIds, dispatch };
     });
     await AuditService.log({
       userId, action: "CREATE", tableName: WARPING_ORDER_TABLE, recordId: out.id,
-      newData: { orderNo: out.orderNo, warpSpecId: input.warpSpecId, subcontractorId: input.subcontractorId, ...auditPlan(out.plan), salesOrderIds: out.salesOrderIds, fixedWasteM: fixed.toString(), wasteTolerancePct: tolerance?.toString() ?? null, ...auditFee(fee) },
+      newData: { orderNo: out.orderNo, warpSpecId: input.warpSpecId, subcontractorId: input.subcontractorId, ...auditPlan(out.plan), salesOrderIds: out.salesOrderIds, fixedWasteM: fixed.toString(), wasteTolerancePct: tolerance?.toString() ?? null, ...auditFee(fee), initialDispatchNo: out.dispatch?.dispatch.dispatchNo ?? null },
     });
-    return { data: await loadWarpingOrderDto(prisma, out.id), replayed: false };
+    if (out.dispatch) await auditWarpingDispatch(out.id, out.dispatch, userId);
+    return {
+      data: await loadWarpingOrderDto(prisma, out.id),
+      initialDispatch: out.dispatch ? { id: out.dispatch.dispatch.id, dispatchNo: out.dispatch.dispatch.dispatchNo, yarnTotalKg: out.dispatch.yarn.totalKg.toFixed(3) } : null,
+      warnings: out.dispatch?.warnings ?? [],
+      replayed: false,
+    };
   });
 }
 

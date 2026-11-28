@@ -335,7 +335,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}loom-alarm-duty.service.ts::ruleReplay`]: ["tier", "kind", "userId", "permissionCode"],
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}consignment-dispatch/create.ts::replayFor`]: ["ownerCustomerId", "items"],
-  [`${S}warping-order/create.ts::replayFor`]: ["warpSpecId", "subcontractorId", "beamLines", "extraWarpSpecIds", "salesOrderIds"],
+  [`${S}warping-order/create.ts::replayFor`]: ["warpSpecId", "subcontractorId", "beamLines", "extraWarpSpecIds", "salesOrderIds", "initialDispatch"],
   [`${S}warping-order/dispatch.ts::dispatchReplay`]: ["warpingOrderId", "lines", "beamBodyIds"],
   [`${S}warping-order/yarn-transfer.ts::transferReplay`]: ["fromWarpingOrderId", "toWarpingOrderId", "lines"],
   [`${S}warping-order/receive.ts::receiveReplay`]: ["warpingOrderId", "deliveryNoteNo", "beams", "reworkOfBeamIds"],

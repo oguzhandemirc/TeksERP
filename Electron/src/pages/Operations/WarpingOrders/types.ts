@@ -3,6 +3,8 @@
 // =============================================================================
 // Sayılar sunucudan METİN olarak gelir (Decimal `toFixed(3)`); panel hesap yapmaz, yalnız biçimler.
 // =============================================================================
+import type { WarpEndsSequenceView } from "@/components/weave/warp-ends";
+import type { WarpingDispatchBody } from "./yarn-types";
 
 export type WarpingOrderStatus = "OPEN" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 export type WarpingFeeUnit = "METRE" | "KG" | "ENDS_METRE";
@@ -111,7 +113,10 @@ export type WarpWasteSource =
   | { kind: "IPLIK_PCT"; yarnItemId: string; value: number };
 
 export interface WarpingOrderPreview {
-  warpSpec: SpecRef;
+  /** `sequenceNote` D1'den beri gelir; eski sunucuda yok. */
+  warpSpec: SpecRef & { sequenceNote?: string | null };
+  /** Dizilim notunun tel tel açılımı (talimatla aynı); eski sunucuda yok. */
+  endsSequence?: WarpEndsSequenceView | null;
   extras: SpecRef[];
   suggestedExtraSpecs: SpecRef[];
   beamLines: BeamLine[];
@@ -151,4 +156,6 @@ export interface WarpingOrderBody {
   feeCurrency?: string | null;
   expectedReturnAt?: string | null;
   notes?: string | null;
+  /** D2: sipariş açılırken ilk iplik sevki (yalnız yeni siparişte; boşsa alan HİÇ gitmez). */
+  initialDispatch?: { lines: WarpingDispatchBody["lines"] };
 }

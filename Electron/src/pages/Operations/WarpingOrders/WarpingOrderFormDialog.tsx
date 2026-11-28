@@ -16,10 +16,13 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { BeamLinesFieldset, OrderIdentityFields, OrderNotesField, OrderTermsFields, SalesOrderLinks } from "./OrderFormFields";
 import { PlanPreview } from "./PlanPreview";
+import { InitialDispatchFields } from "./InitialDispatchFields";
+import { buildInitialDispatch, initialTotalKg, type InitialDrafts } from "./initial-dispatch-model";
 import {
   buildOrderBody,
   editModeOf,
   emptyOrderForm,
+  fmtKg,
   formFromOrder,
   previewBody,
   rememberExtraOptions,
@@ -57,6 +60,10 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   const nextMemo = rememberExtraOptions(extraMemo, s.warpSpecId, preview);
   if (nextMemo !== extraMemo) setExtraMemo(nextMemo);
   const extraOptions = mergeSpecs(nextMemo?.options ?? [], order?.extraSpecs ?? []);
+  const [initial, setInitial] = useState<InitialDrafts>({});
+  // İlk sevk yalnız yeni siparişte ve iplik stoğu izleniyorken (iplik kapalıysa sevk zaten 403).
+  const initialYarns = mode === "create" && fresh && preview?.stock.known ? preview.yarns : null;
+  const initialKg = initialYarns ? initialTotalKg(initial, initialYarns.map((y) => y.yarnItemId)) : 0;
   const attempt = useAttemptToken();
   const qc = useQueryClient();
   const save = useMutation({
@@ -76,7 +83,9 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   const submit = () => {
     const r = buildOrderBody(s, mode);
     if (!r.ok) return setError(r.error);
-    save.mutate(r);
+    const d = initialYarns ? buildInitialDispatch(initial, initialYarns) : ({ ok: true, value: undefined } as const);
+    if (!d.ok) return setError(d.error);
+    save.mutate(d.value ? { ...r, body: { ...r.body, initialDispatch: d.value } } : r);
   };
 
   return (
@@ -98,7 +107,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
             Vazgeç
           </Button>
           <Button onClick={submit} disabled={save.isPending} className="min-w-32">
-            {save.isPending ? "Kaydediliyor…" : order ? "Kaydet" : "Siparişi aç"}
+            {save.isPending ? "Kaydediliyor…" : order ? "Kaydet" : initialKg > 0 ? `Siparişi aç + sevk et (${fmtKg(initialKg)} kg)` : "Siparişi aç"}
           </Button>
         </>
       }
@@ -125,6 +134,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         }
         after={
           <>
+            {initialYarns && <InitialDispatchFields yarns={initialYarns} drafts={initial} onChange={(d) => { setError(null); setInitial(d); }} />}
             <FormCard sectionId="terms" sectionError={error !== null} title="Ücret, termin ve fire" icon={Coins}>
               <OrderTermsFields s={s} up={up} planLocked={planLocked} feeAutoFill={!order} defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null} />
               <div className="mt-4">
