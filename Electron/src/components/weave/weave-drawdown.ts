@@ -48,6 +48,14 @@ export interface DrawdownInput {
   repeat?: number;
   /** Tahar türü (K1): Sivri/Atlamalı standart dizilim; boş/Düz/Özel = düz tahar (bugünkü çizim). */
   drawingInType?: DrawingInType | null;
+  /** T1: kumaşın tahar planı (tel → 1-tabanlı çerçeve no); örgü genişliğini aşarsa türden türetilir (sunucu ikizi). */
+  threading?: readonly number[] | null;
+}
+
+/** Kullanılabilir tahar planı (0-tabanlı sütun) ya da null → türden türet. Sunucu `planThreading` ikizi. */
+export function planDraw(threading: readonly number[] | null | undefined, frames: number): number[] | null {
+  if (!threading || threading.length === 0) return null;
+  return threading.every((f) => Number.isInteger(f) && f >= 1 && f <= frames) ? threading.map((f) => f - 1) : null;
 }
 
 export interface Drawdown {
@@ -59,14 +67,14 @@ export interface Drawdown {
   cells: DrawdownCell[][];
 }
 
-export function computeDrawdown({ liftPlan, lenoFrames = [], selvedgeFrames = [], pickSequence, repeat = 1, drawingInType = null }: DrawdownInput): Drawdown {
+export function computeDrawdown({ liftPlan, lenoFrames = [], selvedgeFrames = [], pickSequence, repeat = 1, drawingInType = null, threading = null }: DrawdownInput): Drawdown {
   const frames = liftPlan.reduce((m, row) => Math.max(m, row.length), 0);
   const ground = groundFrameIndexes(frames, lenoFrames, selvedgeFrames);
   const rep = Math.max(1, Math.trunc(repeat));
   const seq = pickSequence && pickSequence.length > 0 ? pickSequence : null;
   const basePicks = drawdownRepeatPicks(liftPlan.length, seq?.length ?? 0);
   const picks = Math.min(basePicks * rep, DRAWDOWN_MAX_PICKS);
-  const unit = drawUnit(ground, drawingInType);
+  const unit = planDraw(threading, frames) ?? drawUnit(ground, drawingInType);
   const draw = straightDraw(unit, unit.length * rep);
   const cells = Array.from({ length: picks }, (_, j) => {
     const row = liftPlan[j % liftPlan.length] ?? [];

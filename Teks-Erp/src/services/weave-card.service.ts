@@ -9,7 +9,7 @@ import prisma from "../lib/prisma";
 import { factoryDateTimeTr } from "../constants/time";
 import { readWeftOverridesForRecipes, resolveEffectiveConstruction, type EffectiveConstruction } from "./helpers/effective-construction.helper";
 import { weavingOrderConstruction } from "./helpers/tablet-construction.helper";
-import { computeDrawdown, drawdownWindow, groundFrameNumbers } from "./helpers/weave-drawdown.helper";
+import { computeDrawdown, drawdownWindow, groundFrameNumbers, planThreading } from "./helpers/weave-drawdown.helper";
 import { warpSpecDenierLines } from "./helpers/warp-spec-yarn.helper";
 import { qtyText } from "./helpers/qty-text.helper";
 import { weaveClassLabel } from "../constants/weave-classification";
@@ -30,22 +30,23 @@ export interface WeaveCardOrderContext {
   recipeId: string | null;
 }
 
-function fabricView(c: EffectiveConstruction): WeaveCardView["fabric"] {
+function fabricView(c: EffectiveConstruction, threading: readonly number[] | null): WeaveCardView["fabric"] {
   const d = c.weaveDesign;
   const plan = Array.isArray(d?.liftPlan) ? (d.liftPlan as number[][]) : null;
   if (!d || !plan || plan.length === 0) return null;
   if (d.weaveStructure === "LENO") return { kind: "LENO" };
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
-  // Pencerenin tel birimi bir TAHAR raporudur (sivride 2n−2 tel); düz taharda zemin çerçeve sayısı (bugünkü).
-  const drawUnit = drawingInUnit(groundFrameNumbers(frames, d.lenoFrames, d.selvedgeFrames).length, d.drawingInType).length;
+  // Pencerenin tel birimi bir TAHAR raporudur: kumaşın tahar planı varsa onun uzunluğu, yoksa türün dizilimi.
+  const drawUnit = planThreading(threading, frames)?.length
+    ?? drawingInUnit(groundFrameNumbers(frames, d.lenoFrames, d.selvedgeFrames).length, d.drawingInType).length;
   const seq = c.weft?.pickSequence ?? null;
-  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, selvedgeFrames: d.selvedgeFrames, drawingInType: d.drawingInType, pickSequence: seq, ...drawdownWindow(drawUnit, plan.length, seq?.length ?? 0) });
+  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, selvedgeFrames: d.selvedgeFrames, drawingInType: d.drawingInType, threading, pickSequence: seq, ...drawdownWindow(drawUnit, plan.length, seq?.length ?? 0) });
   return dd ? { kind: "DRAWDOWN", ...dd } : null;
 }
 
 export async function buildWeaveCardView(itemId: string, now: Date = new Date(), order?: WeaveCardOrderContext): Promise<WeaveCardView> {
   const c = order?.construction ?? await resolveEffectiveConstruction(prisma, itemId, null);
-  const item = await prisma.item.findUniqueOrThrow({ where: { id: itemId }, select: { code: true, name: true } });
+  const item = await prisma.item.findUniqueOrThrow({ where: { id: itemId }, select: { code: true, name: true, drawingInPlan: { select: { threading: true } } } });
   const recipes = await prisma.productRecipe.findMany({
     where: order?.recipeId ? { id: order.recipeId } : { itemId, isActive: true },
     select: { id: true, name: true, variantCode: true },
@@ -61,7 +62,7 @@ export async function buildWeaveCardView(itemId: string, now: Date = new Date(),
     designNo: item.code,
     itemName: item.name,
     weavingOrderNumber: order?.weavingOrderNumber ?? null,
-    fabric: fabricView(c),
+    fabric: fabricView(c, item.drawingInPlan?.threading ?? null),
     design: d
       ? {
         code: d.code, name: d.name, kindLabel: weaveClassLabel(d), familyLabel: d.familyLabel, frameCount: d.frameCount,

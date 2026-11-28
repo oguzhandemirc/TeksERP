@@ -273,6 +273,8 @@ export interface FeatureFlags {
   dokumaMechanismJacquardEnabled: boolean;
   /** K9: tarak numarası birimi (varsayılan `DENTS_PER_10CM` = bugünkü saklama); çeviri yalnız panelde. */
   devereReedNumberUnit: DevereReedNumberUnit;
+  /** T1: tahar planında en çok çerçeve (varsayılan 12, 1..16). */
+  dokumaDrawingInMaxFrames: number;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */

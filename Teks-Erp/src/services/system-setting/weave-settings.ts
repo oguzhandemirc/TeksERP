@@ -8,6 +8,7 @@
 import prisma from "../../lib/prisma";
 import { SETTING_KEYS } from "./keys";
 import type { WeaveShedMechanismValue } from "../../constants/weave-classification";
+import { DRAWING_IN_FRAMES_DEFAULT_MAX, DRAWING_IN_FRAMES_HARD_MAX } from "../../constants/drawing-in-plan";
 
 type SettingDb = Pick<typeof prisma, "systemSetting">;
 
@@ -59,4 +60,11 @@ export async function readDevereReedNumberUnit(tx?: SettingDb): Promise<DevereRe
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_REED_NUMBER_UNIT }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && DEVERE_REED_NUMBER_UNITS.includes(v as DevereReedNumberUnit) ? (v as DevereReedNumberUnit) : DEFAULT_DEVERE_REED_NUMBER_UNIT;
+}
+
+/** T1 tahar planı çerçeve üst sınırı: kayıt yok ya da aralık dışı → 12 (fabrika: "en yüksek 12"); en çok 16 (DB CHECK). */
+export async function readDokumaDrawingInMaxFrames(tx?: SettingDb): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_DRAWING_IN_MAX_FRAMES }, select: { value: true } });
+  const n = typeof setting?.value === "number" ? setting.value : Number(setting?.value);
+  return Number.isInteger(n) && n >= 1 && n <= DRAWING_IN_FRAMES_HARD_MAX ? n : DRAWING_IN_FRAMES_DEFAULT_MAX;
 }

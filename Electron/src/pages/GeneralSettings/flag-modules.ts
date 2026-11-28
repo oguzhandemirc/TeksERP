@@ -142,6 +142,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı (panel satırı S4b).
   dokumaRollBirth: "dokumaEnabled",
   dokumaWeavingWastePct: "dokumaEnabled",
+  dokumaDrawingInMaxFrames: "dokumaEnabled",
   dokumaYarnReservationEnabled: "dokumaEnabled",
   // K10 (2026-11-25): mekanizma şalterleri desen kartının (dokuma modülü) seçenek ayarı.
   dokumaMechanismCamEnabled: "dokumaEnabled",

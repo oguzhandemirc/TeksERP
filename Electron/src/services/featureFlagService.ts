@@ -487,6 +487,8 @@ export interface FeatureFlags {
   dokumaMechanismJacquardEnabled: boolean;
   /** K9: tarak numarası birimi (backend `DEFAULT_DEVERE_REED_NUMBER_UNIT` = diş/10 cm); çeviri `lib/reed-unit.ts`. */
   devereReedNumberUnit: DevereReedNumberUnit;
+  /** T1: tahar planında en çok çerçeve (backend `DRAWING_IN_FRAMES_DEFAULT_MAX` = 12; 1..16). */
+  dokumaDrawingInMaxFrames: number;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */

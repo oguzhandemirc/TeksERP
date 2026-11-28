@@ -443,6 +443,8 @@ export const updateSchema = z.strictObject({
   dokumaMechanismJacquardEnabled: z.boolean().optional(),
   /** K9: tarak numarası birimi (`DEVERE_REED_NUMBER_UNITS` ile birebir). */
   devereReedNumberUnit: z.enum(["DENTS_PER_10CM", "DENTS_PER_CM"]).optional(),
+  /** T1: tahar planında en çok çerçeve (DRAWING_IN_FRAMES_HARD_MAX ile birebir). */
+  dokumaDrawingInMaxFrames: z.number({ message: "Tahar çerçeve üst sınırı sayı olmalı" }).int("Tahar çerçeve üst sınırı tam sayı olmalı").min(1, "Tahar çerçeve üst sınırı en az 1 olmalı").max(16, "Tahar çerçeve üst sınırı en çok 16 olabilir").optional(),
   /** S1: top doğuş yolu (enum; `DOKUMA_ROLL_BIRTH_MODES` ile birebir). */
   dokumaRollBirth: z.enum(["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"]).optional(),
   /** Dokuma firesi % (`DOKUMA_WEAVING_WASTE_PCT_MAX` ile birebir); null = varsayılana (0) dön. */

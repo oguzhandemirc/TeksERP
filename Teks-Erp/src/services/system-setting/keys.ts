@@ -439,6 +439,8 @@ export const SETTING_KEYS = {
   /** Seyitoğlu K9 (2026-11-25): tarak numarası birimi — `DENTS_PER_10CM` (varsayılan = bugünkü saklama) · `DENTS_PER_CM`.
    *  DB değeri hep diş/10 cm; çeviri yalnız panelin gösterim/giriş katmanında. */
   DEVERE_REED_NUMBER_UNIT: "devere.reedNumberUnit",
+  /** T1 (Seyitoğlu 2026-11-28): tahar planında en çok çerçeve sayısı — varsayılan 12, 1..16 (DB CHECK tavanı). Kaynak `weave-settings.ts`. */
+  DOKUMA_DRAWING_IN_MAX_FRAMES: "dokuma.drawingInMaxFrames",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *

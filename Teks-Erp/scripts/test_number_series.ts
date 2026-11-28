@@ -179,6 +179,7 @@ const BEKLENEN: Record<string, string> = {
   item: "STK-000001",
   serviceItem: "HZM-000001",
   beamBody: "LG-00001",
+  drawingInPlan: "THR-0001",
   beamBodyReturn: `LGI-${yymm}-0001`,
   warpingBeamRejection: `DR-${yymm}-0001`,
   warpingReceiveDoc: `DK-${yymm}-0001`,

@@ -123,6 +123,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kap
   { dosya: "routes/machine-signal.routes.ts", mount: "/api/machine-signals", kimlik: "verifyCollectorSignature" },  // Atkı spesifikasyonu (MAL-1): dokuma ürün yapısı kataloğu — aynı kapı.
   { dosya: "routes/weft-spec.routes.ts", mount: "/api/weft-specs" },
   { dosya: "routes/weave-design.routes.ts", mount: "/api/weave-designs" }, // SY-A2 desen kartı
+  { dosya: "routes/drawing-in-plan.routes.ts", mount: "/api/drawing-in-plans" }, // T1 tahar planı
   { dosya: "routes/item-construction.routes.ts", mount: "/api/item-construction" }, // SY-A2 etkin yapı
   { dosya: "routes/loom-suggestion.routes.ts", mount: "/api/loom-suggestions" }, // SY-M2 tezgâh önerisi
 ];
